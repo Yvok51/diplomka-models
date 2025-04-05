@@ -131,6 +131,8 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    logging.info(f"Using device: {device}")
+
     train_texts, eval_texts, train_labels, eval_labels, label_encoder = load_dataset()
     num_labels = len(label_encoder.classes_)
 
