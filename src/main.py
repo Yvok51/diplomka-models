@@ -16,23 +16,34 @@ import torch
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
+
 class OpenLIDDataset(torch.utils.data.Dataset):
     def __init__(self, encodings, labels):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.encodings = {key: val.to(self.device) for key, val in encodings.items()}
+        self.encodings = {key: val.to(self.device)
+                          for key, val in encodings.items()}
         self.labels = torch.tensor(labels, dtype=torch.float).to(self.device)
 
     def __getitem__(self, idx):
-        item = {key: torch.tensor(val[idx], dtype=torch.long) for key, val in self.encodings.items()}
+        item = {key: torch.tensor(val[idx], dtype=torch.long)
+                for key, val in self.encodings.items()}
         item['labels'] = self.labels[idx]
         return item
 
     def __len__(self):
         return len(self.labels)
 
+
 def load_dataset():
     dataset = datasets.load_dataset(
-        'laurievb/OpenLID-v2', token=os.environ.get("HUGGINGFACE_TOKEN"))
+        'laurievb/OpenLID-v2', token=os.environ.get("HUGGINGFACE_TOKEN"),
+        features=datasets.Features({ # Present because without it, the function throws an exception
+            'text': datasets.Value('string'),
+            'language': datasets.Value('string'),
+            'source': datasets.Value('string'),
+            '__index_level_0__': datasets.Value('int64')
+        })
+    )
 
     df = dataset['train']
     # df = df.select(range(1_000))
@@ -81,6 +92,7 @@ def finetune_model(
     )
 
     metric = evaluate.load("accuracy")
+
     def compute_metrics(eval_pred):
         logits, labels = eval_pred
         predictions = np.argmax(logits, axis=-1)
@@ -100,6 +112,7 @@ def finetune_model(
     trainer.save_model(output_dir)
 
     return model
+
 
 def tokenize_dataset(texts, tokenizer: CanineTokenizer, max_length=2048):
     return tokenizer(
