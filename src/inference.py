@@ -55,9 +55,9 @@ def main():
                         help="Path to input text file (one sentence per line)")
     parser.add_argument(
         "--output", type=argparse.FileType('w'), default=sys.stdout, help="Path to output file (default: input file with .pred extension)")
-    parser.add_argument("--model_path", type=str,
+    parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Path to the finetuned model")
-    parser.add_argument("--encoder_path", type=str,
+    parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     args = parser.parse_args()
 
@@ -88,8 +88,8 @@ def main():
     predicted = predict_from_file(args.input, model, tokenizer,
                                   label_encoder, device, args.output)
 
-    for lang in predicted:
-        print(lang, file=args.output)
+    for item in predicted:
+        print(item['language'], file=args.output)
 
 
 if __name__ == "__main__":
