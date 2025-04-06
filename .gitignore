@@ -2,3 +2,6 @@
 venv/
 .vscode/
 .mypy_cache/
+finetuned/
+trainer_output/
+**/__pycache__/
