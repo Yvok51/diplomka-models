@@ -2,6 +2,8 @@ import os
 import logging
 import pickle
 from pathlib import Path
+from collections import defaultdict
+import random
 
 from dotenv import load_dotenv
 from transformers import (
@@ -9,7 +11,7 @@ from transformers import (
     CanineForSequenceClassification,
     TrainingArguments,
     Trainer,
-    DataCollatorWithPadding,
+    set_seed,
 )
 import datasets
 import evaluate
@@ -20,11 +22,14 @@ from sklearn.preprocessing import LabelEncoder
 
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
+MODEL_PATH = PROJECT_PATH / "finetuned"  # Default path to your finetuned model
+
+SAMPLES_PER_LANGUAGE = 10_000
+RANDOM_SEED = 42
 
 
 class OpenLIDDataset(torch.utils.data.Dataset):
-    def __init__(self, texts, labels, tokenizer):
-        self.tokenizer = tokenizer
+    def __init__(self, texts, labels):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.texts = texts
         self.labels = torch.tensor(labels, dtype=torch.long).to(self.device)
@@ -34,6 +39,40 @@ class OpenLIDDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+class OpenLIDDatasetEncoded(torch.utils.data.Dataset):
+    def __init__(self, encodings, labels):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.encodings = {key: val.to(self.device)
+                          for key, val in encodings.items()}
+        self.labels = torch.tensor(labels, dtype=torch.float).to(self.device)
+
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(val[idx], dtype=torch.long)
+                for key, val in self.encodings.items()}
+        item['labels'] = self.labels[idx]
+        return item
+
+    def __len__(self):
+        return len(self.labels)
+
+
+def sample_dataset(texts: list[str], labels: list[str], samples_per_language: int):
+    languages: defaultdict[str, list[str]] = defaultdict(lambda: [])
+    for idx, label in enumerate(labels):
+        languages[label].append(texts[idx])
+
+    new_texts = []
+    new_labels = []
+    for language, lang_texts in languages.items():
+        if len(lang_texts) <= samples_per_language:
+            new_texts.extend(lang_texts)
+            new_labels.extend([language] * len(lang_texts))
+        else:
+            new_texts.extend(random.sample(lang_texts, k=samples_per_language))
+            new_labels.extend([language] * samples_per_language)
+
+    return new_texts, new_labels
 
 
 def load_dataset():
@@ -50,26 +89,28 @@ def load_dataset():
     df = dataset['train']
     # df = df.select(range(100_000))
 
+    logging.info("Randomly sampling dataset...")
+    texts, labels = sample_dataset(df['text'], df['language'], SAMPLES_PER_LANGUAGE)
+
     logging.info("Encoding the labels...")
     # Encode language labels
     if os.path.exists(ENCODER_PATH):
         label_encoder = load_label_encoder(ENCODER_PATH)
-        encoded_labels = label_encoder.transform(df['language'])
+        encoded_labels = label_encoder.transform(labels)
     else:
         label_encoder = LabelEncoder()
-        encoded_labels = label_encoder.fit_transform(df['language'])
+        encoded_labels = label_encoder.fit_transform(labels)
         save_label_encoder(label_encoder, ENCODER_PATH)
 
     logging.info("Splitting dataset...")
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
-        df['text'],
+        texts,
         encoded_labels,
         test_size=0.1,
         random_state=42
     )
 
     return train_texts, eval_texts, train_labels, eval_labels, label_encoder
-
 
 class OnTheFlyTokenizationCollator:
     def __init__(self, tokenizer, max_length=2048):
@@ -104,7 +145,7 @@ def finetune_model(
     output_dir='./finetuned',
     learning_rate=5e-5,
     per_device_train_batch_size=24,
-    num_train_epochs=3,
+    num_train_epochs=1,
     weight_decay=0.01,
 ):
     collator = OnTheFlyTokenizationCollator(tokenizer=tokenizer)
@@ -170,7 +211,9 @@ def load_label_encoder(path) -> LabelEncoder:
 def main():
     load_dotenv()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    set_seed(RANDOM_SEED)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -183,19 +226,20 @@ def main():
         "google/canine-c", num_labels=num_labels).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
+
+    train_dataset = OpenLIDDataset(train_texts, train_labels)
+    eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
+
     # logging.info("Tokenizing inputs...")
     # train_encodings = tokenize_dataset(train_texts, tokenizer)
     # eval_encodings = tokenize_dataset(eval_texts, tokenizer)
 
-    train_dataset = OpenLIDDataset(train_texts, train_labels, tokenizer)
-    eval_dataset = OpenLIDDataset(eval_texts, eval_labels, tokenizer)
+    # train_dataset = OpenLIDDatasetEncoded(train_encodings, train_labels)
+    # eval_dataset = OpenLIDDatasetEncoded(eval_encodings, eval_labels)
 
-    # labels = torch.tensor([1], dtype=torch.float)
-    # inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-    # loss = model(**inputs, labels=labels).loss
 
     logging.info("Finetuning...")
-    finetune_model(model, tokenizer, train_dataset, eval_dataset)
+    finetune_model(model, tokenizer, train_dataset, eval_dataset, output_dir=MODEL_PATH)
 
 
 if __name__ == "__main__":
