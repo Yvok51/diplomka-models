@@ -61,7 +61,8 @@ class OpenLIDDatasetEncoded(torch.utils.data.Dataset):
 def sample_dataset(texts: list[str], labels: list[str], samples_per_language: int):
     languages: defaultdict[str, list[str]] = defaultdict(lambda: [])
     for idx, label in enumerate(labels):
-        languages[label].append(texts[idx])
+        if isinstance(texts[idx], str):
+            languages[label].append(texts[idx])
 
     new_texts = []
     new_labels = []
