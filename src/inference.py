@@ -6,7 +6,7 @@ from collections import Counter
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
 
-from main import load_label_encoder, ENCODER_PATH, MODEL_PATH, tokenize_dataset
+from multiclass import load_label_encoder, ENCODER_PATH, MODEL_PATH, tokenize_dataset
 
 
 def predict_language(text, model, tokenizer, label_encoder, device):
