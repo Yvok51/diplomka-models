@@ -2,6 +2,7 @@ import logging
 import torch
 import argparse
 import sys
+from collections import Counter
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
 
@@ -59,6 +60,8 @@ def main():
                         default=str(MODEL_PATH), help="Path to the finetuned model")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
+    parser.add_argument("--correct-label", default=None, type=str,
+                        help="The correct label for the sentences, prints out accuracy if provided")
     args = parser.parse_args()
 
     # Configure logging
@@ -89,7 +92,19 @@ def main():
                                   label_encoder, device, args.output)
 
     for item in predicted:
-        print(item['language'], file=args.output)
+        print(item["text"] + "\t" + item['language'], file=args.output)
+
+    counter = Counter((item["language"] for item in predicted))
+    print("=== Language counts ===")
+    for lang, count in counter.most_common(5):
+        print(f"{lang}: {count}")
+
+    if args.correct_label:
+        correct = sum(
+            (item["language"] == args.correct_label for item in predicted))
+        print("=== Accuracy ===")
+        print(f"Accuracy: {correct} / {len(predicted)} = {correct / len(predicted)}")
+
 
 
 if __name__ == "__main__":
