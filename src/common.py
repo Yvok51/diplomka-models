@@ -1,6 +1,8 @@
 import random
 from collections import defaultdict
 from pathlib import Path
+import pickle
+import os
 
 import torch
 
@@ -61,13 +63,13 @@ class OnTheFlyTokenizationCollator:
 
         return batch_encodings
 
-def save_label_encoder(label_encoder: LabelEncoder, path: Path):
+def save_label_encoder(label_encoder, path: Path):
     os.makedirs(path.parent, exist_ok=True)
     with open(path, 'wb') as f:
         pickle.dump(label_encoder, f)
 
 
-def load_label_encoder(path) -> LabelEncoder:
+def load_label_encoder(path):
     with open(path, 'rb') as f:
         return pickle.load(f)
 
