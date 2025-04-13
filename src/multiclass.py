@@ -48,7 +48,7 @@ def load_dataset(samples_count: int | None, encoder_path: Path):
     )
 
     df = dataset['train']
-    df = df.select(range(10_000))
+    # df = df.select(range(10_000))
 
     if samples_count:
         logging.info("Randomly sampling dataset...")
