@@ -22,7 +22,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-from common import PROJECT_PATH, sample_dataset, load_label_encoder, save_label_encoder, OpenLIDDataset, OnTheFlyTokenizationCollator
+from common import PROJECT_PATH, sample_dataset, load_object, save_object, OpenLIDDataset, OnTheFlyTokenizationCollator
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 # Default path to your finetuned model
@@ -59,7 +59,7 @@ class CanineForMultiLabelClassification(nn.Module):
         return {"loss": loss, "logits": logits} if loss is not None else {"logits": logits}
 
 
-def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
+def prepare_multilabel_dataset(sample_count: int | None, dataset_path=None):
     """
     Prepare a multi-label dataset by:
     1. Loading original data
@@ -96,12 +96,12 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
 
     # Encode multi-labels with MultiLabelBinarizer
     if os.path.exists(ENCODER_PATH):
-        mlb = load_label_encoder(ENCODER_PATH)
+        mlb = load_object(ENCODER_PATH)
         encoded_labels = mlb.transform(all_labels)
     else:
         mlb = MultiLabelBinarizer()
         encoded_labels = mlb.fit_transform(all_labels)
-        save_label_encoder(mlb, ENCODER_PATH)
+        save_object(mlb, ENCODER_PATH)
 
     # Split dataset
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(

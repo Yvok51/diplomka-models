@@ -146,10 +146,10 @@ def main():
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=24,
+    parser.add_argument("--batch-size", type=int, default=96,
                         help="The batch size to use")
-    parser.add_argument("--max-length", type=int, default=2048,
-                        help="The max length of the tokenized input. The default and model maximum is 2048")
+    parser.add_argument("--max-length", type=int, default=512,
+                        help="The max length of the tokenized input. The model maximum is 2048")
     args = parser.parse_args()
 
     load_dotenv()
@@ -174,6 +174,7 @@ def main():
     # train_dataset = OpenLIDDataset(train_texts, train_labels)
     # eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
 
+    logging.info("Tokenizing dataset...")
     train_tokens = tokenize_dataset(train_texts, tokenizer, args.max_length)
     eval_tokens = tokenize_dataset(eval_texts, tokenizer, args.max_length)
 
