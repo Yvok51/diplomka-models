@@ -6,7 +6,7 @@ from collections import Counter
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
 
-from multiclass import load_label_encoder, ENCODER_PATH, MODEL_PATH, tokenize_dataset
+from multiclass import load_object, ENCODER_PATH, MODEL_PATH, tokenize_dataset
 
 
 def predict_language(text, model, tokenizer, label_encoder, device):
@@ -84,7 +84,7 @@ def main():
 
     # Load label encoder
     logging.info(f"Loading label encoder from {args.encoder_path}")
-    label_encoder = load_label_encoder(args.encoder_path)
+    label_encoder = load_object(args.encoder_path)
 
     # Process input file
     logging.info(f"Processing input file: {args.input}")
