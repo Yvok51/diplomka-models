@@ -65,7 +65,7 @@ def tokenize_dataset(texts, tokenizer: CanineTokenizer, max_length=2048):
     if os.path.exists(get_tokenized_inputs_path(max_length)):
         tokenized = load_object(get_tokenized_inputs_path(max_length))
     else:
-        tokenized = [tokenize_input([text], tokenizer, max_length) for text in tqdm.tqdm(texts)]
+        tokenized = [tokenize_input([text], tokenizer, max_length) for text in tqdm.tqdm(texts) if isinstance(text, str)]
         save_object(tokenized, get_tokenized_inputs_path(max_length))
 
     return tokenized
