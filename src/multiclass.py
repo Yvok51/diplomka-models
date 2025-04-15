@@ -197,7 +197,8 @@ def main():
         pre_tokenize=args.pre_tokenize,
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        max_length=args.max_length
     )
 
 
