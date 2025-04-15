@@ -89,9 +89,9 @@ def finetune_model(
     weight_decay=0.01,
     max_length=2048
 ):
-    # collator = OnTheFlyTokenizationCollator(
-    #     tokenizer=tokenizer, max_length=max_length)
-    collator = ConcatenateEncodingCollator(max_length)
+    collator = OnTheFlyTokenizationCollator(
+        tokenizer=tokenizer, max_length=max_length)
+    # collator = ConcatenateEncodingCollator(max_length)
 
     training_args = TrainingArguments(
         eval_strategy="epoch",
@@ -171,15 +171,15 @@ def main():
         "google/canine-c", num_labels=num_labels).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
-    # train_dataset = OpenLIDDataset(train_texts, train_labels)
-    # eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
+    train_dataset = OpenLIDDataset(train_texts, train_labels)
+    eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
 
-    logging.info("Tokenizing dataset...")
-    train_tokens = tokenize_dataset(train_texts, tokenizer, args.max_length)
-    eval_tokens = tokenize_dataset(eval_texts, tokenizer, args.max_length)
+    # logging.info("Tokenizing dataset...")
+    # train_tokens = tokenize_dataset(train_texts, tokenizer, args.max_length)
+    # eval_tokens = tokenize_dataset(eval_texts, tokenizer, args.max_length)
 
-    train_dataset = EncodedOpenLIDDataset(train_tokens, train_labels)
-    eval_dataset = EncodedOpenLIDDataset(eval_tokens, eval_labels)
+    # train_dataset = EncodedOpenLIDDataset(train_tokens, train_labels)
+    # eval_dataset = EncodedOpenLIDDataset(eval_tokens, eval_labels)
 
     logging.info("Finetuning...")
     finetune_model(model, tokenizer, train_dataset,
