@@ -82,6 +82,7 @@ def finetune_model(
     tokenizer,
     train_dataset,
     eval_dataset,
+    pre_tokenize,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=24,
@@ -89,9 +90,11 @@ def finetune_model(
     weight_decay=0.01,
     max_length=2048
 ):
-    collator = OnTheFlyTokenizationCollator(
-        tokenizer=tokenizer, max_length=max_length)
-    # collator = ConcatenateEncodingCollator(max_length)
+    if pre_tokenize:
+        collator = ConcatenateEncodingCollator(max_length)
+    else:
+        collator = OnTheFlyTokenizationCollator(
+            tokenizer=tokenizer, max_length=max_length)
 
     training_args = TrainingArguments(
         eval_strategy="epoch",
@@ -150,6 +153,8 @@ def main():
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
+    parser.add_argument("--pre-tokenize", action="store_true", default=False,
+                        help="We should pre tokenize the entire dataset, by default the tokenization is on the fly")
     args = parser.parse_args()
 
     load_dotenv()
@@ -171,19 +176,29 @@ def main():
         "google/canine-c", num_labels=num_labels).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
-    train_dataset = OpenLIDDataset(train_texts, train_labels)
-    eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
+    if args.pre_tokenize:
+        logging.info("Tokenizing dataset...")
+        train_tokens = tokenize_dataset(
+            train_texts, tokenizer, args.max_length)
+        eval_tokens = tokenize_dataset(eval_texts, tokenizer, args.max_length)
 
-    # logging.info("Tokenizing dataset...")
-    # train_tokens = tokenize_dataset(train_texts, tokenizer, args.max_length)
-    # eval_tokens = tokenize_dataset(eval_texts, tokenizer, args.max_length)
-
-    # train_dataset = EncodedOpenLIDDataset(train_tokens, train_labels)
-    # eval_dataset = EncodedOpenLIDDataset(eval_tokens, eval_labels)
+        train_dataset = EncodedOpenLIDDataset(train_tokens, train_labels)
+        eval_dataset = EncodedOpenLIDDataset(eval_tokens, eval_labels)
+    else:
+        train_dataset = OpenLIDDataset(train_texts, train_labels)
+        eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
 
     logging.info("Finetuning...")
-    finetune_model(model, tokenizer, train_dataset,
-                   eval_dataset, output_dir=args.model_path, num_train_epochs=args.epochs, batch_size=args.batch_size)
+    finetune_model(
+        model,
+        tokenizer,
+        train_dataset,
+        eval_dataset,
+        pre_tokenize=args.pre_tokenize,
+        output_dir=args.model_path,
+        num_train_epochs=args.epochs,
+        batch_size=args.batch_size
+    )
 
 
 if __name__ == "__main__":
