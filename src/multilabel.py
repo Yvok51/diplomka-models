@@ -25,10 +25,10 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from common import PROJECT_PATH, sample_dataset, load_object, save_object, OpenLIDDataset, OnTheFlyTokenizationCollator
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
-# Default path to your finetuned model
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
 
 SAMPLES_PER_LANGUAGE = 10_000
+SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 
 
 class CanineForMultiLabelClassification(nn.Module):
@@ -38,9 +38,10 @@ class CanineForMultiLabelClassification(nn.Module):
         self.canine = CanineModel.from_pretrained("google/canine-c")
         self.dropout = nn.Dropout(0.1)
         self.classifier = nn.Linear(self.canine.config.hidden_size, num_labels)
-        self.sigmoid = nn.Sigmoid()  # Use sigmoid for multi-label
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
+        kwargs.pop("num_items_in_batch", None) # Quick fix for bug in transformers package
         outputs = self.canine(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -54,12 +55,12 @@ class CanineForMultiLabelClassification(nn.Module):
         loss = None
         if labels is not None:
             loss_fct = nn.BCEWithLogitsLoss()  # Binary cross-entropy loss
-            loss = loss_fct(logits, labels)
+            loss = loss_fct(logits, labels.float())
 
-        return {"loss": loss, "logits": logits} if loss is not None else {"logits": logits}
+        return {"loss": loss, "logits": logits, "hidden_states": outputs.hidden_states, "attentions": outputs.attentions}
 
 
-def prepare_multilabel_dataset(sample_count: int | None, dataset_path=None):
+def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     """
     Prepare a multi-label dataset by:
     1. Loading original data
@@ -79,14 +80,19 @@ def prepare_multilabel_dataset(sample_count: int | None, dataset_path=None):
     )
 
     df = dataset['train']
+    df = df.select(range(100_000))
 
     texts_original = df['text']
     labels_original = df['language']
 
-    texts_single, labels_single = sample_dataset(
-        texts_original, labels_original, sample_count // 2)
+    if sample_count:
+        texts_single, labels_single = sample_dataset(
+            texts_original, labels_original, sample_count)
+    else:
+        texts_single, labels_single = texts_original, labels_original
 
-    texts_multi, labels_multi = create_synthetic_data(texts_original, labels_original, sample_count // 2)
+    texts_multi, labels_multi = create_synthetic_data(
+        texts_original, labels_original, len(texts_single) // 4)
 
     # Combine single-language and multi-language samples
     labels_single_as_lists = [[label] for label in labels_single]
@@ -94,7 +100,7 @@ def prepare_multilabel_dataset(sample_count: int | None, dataset_path=None):
     all_texts = texts_single + texts_multi
     all_labels = labels_single_as_lists + labels_multi
 
-    # Encode multi-labels with MultiLabelBinarizer
+    # Encode multi-labels
     if os.path.exists(ENCODER_PATH):
         mlb = load_object(ENCODER_PATH)
         encoded_labels = mlb.transform(all_labels)
@@ -103,7 +109,6 @@ def prepare_multilabel_dataset(sample_count: int | None, dataset_path=None):
         encoded_labels = mlb.fit_transform(all_labels)
         save_object(mlb, ENCODER_PATH)
 
-    # Split dataset
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
         all_texts,
         encoded_labels,
@@ -114,7 +119,6 @@ def prepare_multilabel_dataset(sample_count: int | None, dataset_path=None):
 
 
 def create_synthetic_data(texts: list[str], labels: list, sample_count: int):
-    # Create synthetic multi-language samples
     texts_multi = []
     labels_multi = []
 
@@ -125,12 +129,11 @@ def create_synthetic_data(texts: list[str], labels: list, sample_count: int):
 
     # Sample languages that have enough samples
     viable_languages = [lang for lang,
-                        texts in language_texts.items() if len(texts) >= 100]
+                        texts in language_texts.items() if len(texts) >= SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF]
 
-    # Create multi-language samples
     num_synthetic_samples = sample_count // 2
     logging.info(
-        f"Creating {num_synthetic_samples} synthetic multi-language samples...")
+        "Creating %s synthetic multi-language samples...", num_synthetic_samples)
 
     for _ in range(num_synthetic_samples):
         # Select 2-3 random languages
@@ -150,7 +153,7 @@ def create_synthetic_data(texts: list[str], labels: list, sample_count: int):
                 text = ' '.join(words[start_idx:start_idx + fragment_size])
             sample_texts.append(text)
 
-        # Combine texts with spaces
+        # Combine texts
         combined_text = ' '.join(sample_texts)
         texts_multi.append(combined_text)
         labels_multi.append(selected_langs)
@@ -168,8 +171,10 @@ def finetune_model(
     batch_size=16,
     num_train_epochs=3,
     weight_decay=0.01,
+    max_length=2048
 ):
-    collator = OnTheFlyTokenizationCollator(tokenizer=tokenizer)
+    collator = OnTheFlyTokenizationCollator(
+        tokenizer=tokenizer, max_length=max_length)
 
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -238,19 +243,22 @@ def main():
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=24,
+    parser.add_argument("--batch-size", type=int, default=96,
                         help="The batch size to use")
+    parser.add_argument("--max-length", type=int, default=512,
+                        help="The max length of the tokenized input. The model maximum is 2048")
     args = parser.parse_args()
 
     load_dotenv()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
 
     set_seed(args.seed)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    logging.info(f"Using device: {device}")
+    logging.info("Using device: %s", device)
 
     train_texts, eval_texts, train_labels, eval_labels, mlb = prepare_multilabel_dataset(
         args.samples_per_language, Path(args.encoder_path))
@@ -263,7 +271,8 @@ def main():
     eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
 
     logging.info("Finetuning...")
-    finetune_model(model, tokenizer, train_dataset, eval_dataset, output_dir=args.model_path, num_train_epochs=args.epochs, batch_size=args.batch_size)
+    finetune_model(model, tokenizer, train_dataset, eval_dataset, output_dir=args.model_path,
+                   num_train_epochs=args.epochs, batch_size=args.batch_size, max_length=args.max_length)
 
 
 if __name__ == "__main__":

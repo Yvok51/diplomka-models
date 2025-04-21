@@ -5,31 +5,56 @@ import sys
 from collections import Counter
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
+import numpy as np
 
-from multiclass import load_object, ENCODER_PATH, MODEL_PATH, tokenize_dataset
+from common import load_object, tokenize_input
+from multiclass import ENCODER_PATH, MODEL_PATH
+from multilabel import CanineForMultiLabelClassification
+
+MULTILABEL_THRESHOLD = 0.5
 
 
-def predict_language(text, model, tokenizer, label_encoder, device):
-    """Predict the language of a given text."""
-    inputs = tokenize_dataset(text, tokenizer)
+def get_logits(text, model, tokenizer, device):
+    """Get logits from a model"""
+    inputs = tokenize_input(text, tokenizer)
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
     with torch.no_grad():
         outputs = model(**inputs)
 
-    # Get prediction
-    logits = outputs.logits
+    return outputs.logits
+
+
+def predict_multilabel(text, model, tokenizer, label_encoder, device, threshold=MULTILABEL_THRESHOLD):
+    """Predict the language of a given text using a multilabel model."""
+    logits = get_logits(text, model, tokenizer, device)
+    probabilities = torch.sigmoid(logits).cpu().numpy()[0]
+    detected_indices = np.where(probabilities > threshold)[0]
+
+    results = []
+    for idx in detected_indices:
+        language = label_encoder.inverse_transform([idx])[0]
+        confidence = probabilities[idx]
+        results.append((language, confidence))
+
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results
+
+
+def predict_multiclass(text, model, tokenizer, label_encoder, device):
+    """Predict the language of a given text using a multiclass model."""
+    logits = get_logits(text, model, tokenizer, device)
     prediction = torch.argmax(logits, dim=-1).cpu().numpy()[0]
+
     language = label_encoder.inverse_transform([prediction])[0]
 
-    # Calculate confidence (softmax of logits)
     probs = torch.nn.functional.softmax(logits, dim=-1)
     confidence = probs[0][prediction].item()
 
-    return language, confidence
+    return [(language, confidence)]
 
 
-def predict_from_file(file, model, tokenizer, label_encoder, device, output_file=None):
+def predict_from_file(predict, file, model, tokenizer, label_encoder, device):
     """Predict languages for each line in the given file."""
     results = []
 
@@ -38,20 +63,29 @@ def predict_from_file(file, model, tokenizer, label_encoder, device, output_file
         if not line:
             continue
 
-        language, confidence = predict_language(
+        predictions = predict(
             line, model, tokenizer, label_encoder, device)
-        results.append({"text": line, "language": language,
-                        "confidence": confidence})
+        languages, confidences = zip(*predictions)
+        results.append({"text": line, "languages": languages,
+                        "confidences": confidences})
 
         if (idx + 1) % 1000 == 0:
-            logging.info(f"Processed {idx + 1} lines...")
+            logging.info("Processed %s lines...", idx + 1)
 
     return results
 
+def load_multilabel_model(model_path, num_labels, device):
+    """Load the multi-label model from disk"""
+    model = CanineForMultiLabelClassification(num_labels=num_labels)
+    model.load_state_dict(torch.load(os.path.join(model_path, "pytorch_model.bin"), map_location=device))
+    model.to(device)
+    model.eval()
+    return model
 
 def main():
     parser = argparse.ArgumentParser(
         description="Language prediction using finetuned CANINE model")
+    parser.add_argument("--type", choices=["multiclass", "multilabel"], help="The model which we are using")
     parser.add_argument("--input", type=argparse.FileType('r'), default=sys.stdin,
                         help="Path to input text file (one sentence per line)")
     parser.add_argument(
@@ -64,47 +98,46 @@ def main():
                         help="The correct label for the sentences, prints out accuracy if provided")
     args = parser.parse_args()
 
-    # Configure logging
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
-    # Set output file if not provided
-    if not args.output:
-        args.output = f"{args.input}.pred"
-
-    # Set device
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    logging.info(f"Using device: {device}")
+    logging.info("Using device: %s", device)
+
+    logging.info("Loading label encoder from %s", args.encoder_path)
+    label_encoder = load_object(args.encoder_path)
+    num_labels = len(label_encoder.classes_)
 
     # Load model and tokenizer
-    logging.info(f"Loading model from {args.model_path}")
-    model = CanineForSequenceClassification.from_pretrained(
-        args.model_path).to(device)
+    logging.info("Loading model from %s", args.model_path)
+    if args.type == "multiclass":
+        model = CanineForSequenceClassification.from_pretrained(
+            args.model_path).to(device)
+    else:
+        model = load_multilabel_model(args.model_path, num_labels, device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
-    # Load label encoder
-    logging.info(f"Loading label encoder from {args.encoder_path}")
-    label_encoder = load_object(args.encoder_path)
 
     # Process input file
-    logging.info(f"Processing input file: {args.input}")
-    predicted = predict_from_file(args.input, model, tokenizer,
-                                  label_encoder, device, args.output)
+    logging.info("Processing input file: %s", args.input)
+    predicted = predict_from_file(
+        predict_multiclass, args.input, model, tokenizer, label_encoder, device
+    )
 
     for item in predicted:
-        print(item["text"] + "\t" + item['language'], file=args.output)
+        print(item["text"] + "\t" + ",".join(item['languages']), file=args.output)
 
-    counter = Counter((item["language"] for item in predicted))
+    counter = Counter((lang for item in predicted for lang in item["languages"]))
     print("=== Language counts ===")
     for lang, count in counter.most_common(5):
         print(f"{lang}: {count}")
 
     if args.correct_label:
         correct = sum(
-            (item["language"] == args.correct_label for item in predicted))
+            args.correct_label in (item["languages"] for item in predicted))
         print("=== Accuracy ===")
-        print(f"Accuracy: {correct} / {len(predicted)} = {correct / len(predicted)}")
-
+        print(
+            f"Accuracy: {correct} / {len(predicted)} = {correct / len(predicted)}")
 
 
 if __name__ == "__main__":
