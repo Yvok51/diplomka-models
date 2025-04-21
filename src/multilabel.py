@@ -38,7 +38,6 @@ class CanineForMultiLabelClassification(nn.Module):
         self.canine = CanineModel.from_pretrained("google/canine-c")
         self.dropout = nn.Dropout(0.1)
         self.classifier = nn.Linear(self.canine.config.hidden_size, num_labels)
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
         kwargs.pop("num_items_in_batch", None) # Quick fix for bug in transformers package
@@ -57,7 +56,9 @@ class CanineForMultiLabelClassification(nn.Module):
             loss_fct = nn.BCEWithLogitsLoss()  # Binary cross-entropy loss
             loss = loss_fct(logits, labels.float())
 
-        return {"loss": loss, "logits": logits, "hidden_states": outputs.hidden_states, "attentions": outputs.attentions}
+            return {"loss": loss, "logits": logits}
+
+        return { "logits": logits }
 
 
 def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
