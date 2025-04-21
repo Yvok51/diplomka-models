@@ -3,6 +3,7 @@ import torch
 import argparse
 import sys
 from collections import Counter
+import os
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
 import numpy as np
@@ -22,7 +23,7 @@ def get_logits(text, model, tokenizer, device):
     with torch.no_grad():
         outputs = model(**inputs)
 
-    return outputs.logits
+    return outputs['logits']
 
 
 def predict_multilabel(text, model, tokenizer, label_encoder, device, threshold=MULTILABEL_THRESHOLD):
@@ -74,13 +75,6 @@ def predict_from_file(predict, file, model, tokenizer, label_encoder, device):
 
     return results
 
-def load_multilabel_model(model_path, num_labels, device):
-    """Load the multi-label model from disk"""
-    model = CanineForMultiLabelClassification(num_labels=num_labels)
-    model.load_state_dict(torch.load(os.path.join(model_path, "pytorch_model.bin"), map_location=device))
-    model.to(device)
-    model.eval()
-    return model
 
 def main():
     parser = argparse.ArgumentParser(
@@ -114,7 +108,7 @@ def main():
         model = CanineForSequenceClassification.from_pretrained(
             args.model_path).to(device)
     else:
-        model = load_multilabel_model(args.model_path, num_labels, device)
+        model = CanineForMultiLabelClassification.from_pretrained(args.model_path).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
 

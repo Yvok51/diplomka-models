@@ -11,10 +11,11 @@ from transformers import (
     CanineModel,
     TrainingArguments,
     Trainer,
+    PreTrainedModel,
+    PretrainedConfig,
     set_seed,
 )
 import datasets
-import evaluate
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,7 +23,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-from common import PROJECT_PATH, sample_dataset, load_object, save_object, OpenLIDDataset, OnTheFlyTokenizationCollator
+from common import (
+    PROJECT_PATH,
+    sample_dataset,
+    load_object,
+    save_object,
+    OpenLIDDataset,
+    OnTheFlyTokenizationCollator
+)
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
@@ -31,16 +39,28 @@ SAMPLES_PER_LANGUAGE = 10_000
 SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 
 
-class CanineForMultiLabelClassification(nn.Module):
-    def __init__(self, num_labels):
-        super().__init__()
+class CanineForMultiLabelClassificationConfig(PretrainedConfig):
+    model_type = "CanineMultiLabelClassifier"
+    num_labels = 2
+
+    def __init__(self, num_labels = 2, **kwargs):
+        super().__init__(**kwargs)
         self.num_labels = num_labels
+
+
+class CanineForMultiLabelClassification(PreTrainedModel):
+    config_class = CanineForMultiLabelClassificationConfig
+
+    def __init__(self, config: CanineForMultiLabelClassificationConfig):
+        super().__init__(config)
+        self.config = config
         self.canine = CanineModel.from_pretrained("google/canine-c")
         self.dropout = nn.Dropout(0.1)
-        self.classifier = nn.Linear(self.canine.config.hidden_size, num_labels)
+        self.classifier = nn.Linear(self.canine.config.hidden_size, self.config.num_labels)
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
-        kwargs.pop("num_items_in_batch", None) # Quick fix for bug in transformers package
+        # Quick fix for bug in transformers package
+        kwargs.pop("num_items_in_batch", None)
         outputs = self.canine(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -58,7 +78,7 @@ class CanineForMultiLabelClassification(nn.Module):
 
             return {"loss": loss, "logits": logits}
 
-        return { "logits": logits }
+        return {"logits": logits}
 
 
 def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
@@ -81,7 +101,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     )
 
     df = dataset['train']
-    # df = df.select(range(100_000))
+    df = df.select(range(100_000))
 
     texts_original = df['text']
     labels_original = df['language']
@@ -265,7 +285,7 @@ def main():
         args.samples_per_language, Path(args.encoder_path))
     num_labels = len(mlb.classes_)
 
-    model = CanineForMultiLabelClassification(num_labels=num_labels).to(device)
+    model = CanineForMultiLabelClassification(CanineForMultiLabelClassificationConfig(num_labels=num_labels)).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
     train_dataset = OpenLIDDataset(train_texts, train_labels)
