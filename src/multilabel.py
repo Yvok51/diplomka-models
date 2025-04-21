@@ -81,7 +81,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     )
 
     df = dataset['train']
-    df = df.select(range(100_000))
+    # df = df.select(range(100_000))
 
     texts_original = df['text']
     labels_original = df['language']
