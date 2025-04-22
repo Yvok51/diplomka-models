@@ -5,7 +5,10 @@ import pickle
 import os
 
 import torch
+import numpy as np
+import pandas as pd
 from transformers import CanineTokenizer
+from transformers.integrations import WandbCallback
 import tqdm
 
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
@@ -16,7 +19,7 @@ def get_tokenized_inputs_path(max_length):
 class OpenLIDDataset(torch.utils.data.Dataset):
     def __init__(self, texts, labels):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.texts = texts
+        self.texts = np.asarray(texts)
         self.labels = torch.tensor(labels, dtype=torch.long).to(self.device)
 
     def __getitem__(self, idx):
@@ -24,6 +27,13 @@ class OpenLIDDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+    def random_subset(self, n=1):
+        indices = np.asarray([np.random.randint(0, len(self.texts)) for _ in range(n)])
+        texts = self.texts[indices]
+        labels = self.labels[indices]
+
+        return OpenLIDDataset(texts, labels)
 
 
 class EncodedOpenLIDDataset(torch.utils.data.Dataset):
@@ -122,3 +132,59 @@ def save_object(obj, path: Path):
 def load_object(path: Path):
     with open(path, 'rb') as f:
         return pickle.load(f)
+
+
+class WandbPredictionProgressCallback(WandbCallback):
+    """Custom WandbCallback to log model predictions during training.
+
+    This callback logs model predictions and labels to a wandb.Table at each
+    logging step during training. It allows to visualize the
+    model predictions as the training progresses.
+
+    Attributes:
+        trainer (Trainer): The Hugging Face Trainer instance.
+        tokenizer (AutoTokenizer): The tokenizer associated with the model.
+        sample_dataset (Dataset): A subset of the validation dataset
+          for generating predictions.
+        num_samples (int, optional): Number of samples to select from
+          the validation dataset for generating predictions. Defaults to 100.
+        freq (int, optional): Frequency of logging. Defaults to 2.
+    """
+
+    def __init__(self, model, tokenizer, label_encoder, predict, val_dataset: OpenLIDDataset, device, num_samples=100, freq=2):
+        """Initializes the WandbPredictionProgressCallback instance.
+
+        Args:
+            trainer (Trainer): The Hugging Face Trainer instance.
+            tokenizer (AutoTokenizer): The tokenizer associated
+              with the model.
+            val_dataset (Dataset): The validation dataset.
+            num_samples (int, optional): Number of samples to select from
+              the validation dataset for generating predictions.
+              Defaults to 100.
+            freq (int, optional): Frequency of logging. Defaults to 2.
+        """
+        super().__init__()
+        self.model = model
+        self.tokenizer = tokenizer
+        self.label_encoder = label_encoder
+        self.sample_dataset = val_dataset.random_subset(num_samples)
+        self.predict = predict
+        self.device = device
+        self.freq = freq
+
+    def on_evaluate(self, args, state, control, **kwargs):
+        super().on_evaluate(args, state, control, **kwargs)
+        # control the frequency of logging by logging the predictions
+        # every `freq` epochs
+        if state.epoch % self.freq == 0:
+            # generate predictions
+            predictions = self.predict(self.sample_dataset, self.model, self.tokenizer, self.label_encoder, self.device)
+
+            # add predictions to a wandb.Table
+            predictions_df = pd.DataFrame(predictions)
+            predictions_df["epoch"] = state.epoch
+            records_table = self._wandb.Table(dataframe=predictions_df)
+            # log the table to wandb
+            self._wandb.log({"sample_predictions": records_table})
+

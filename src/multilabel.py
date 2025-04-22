@@ -29,8 +29,10 @@ from common import (
     load_object,
     save_object,
     OpenLIDDataset,
-    OnTheFlyTokenizationCollator
+    OnTheFlyTokenizationCollator,
+    WandbPredictionProgressCallback
 )
+from prediction import predict_multilabel
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
@@ -39,11 +41,23 @@ SAMPLES_PER_LANGUAGE = 10_000
 SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 
 
+def predict(dataset, model, tokenizer, encoder, device):
+    predictions = []
+    labels = []
+    for text, label in dataset:
+        results = predict_multilabel(text, model, tokenizer, encoder, device)
+        languages, _ = zip(*results) if len(results) > 0 else [], []
+        predictions.append(languages)
+        labels.append(encoder.inverse_transform([label])[0])
+
+    return {"labels": labels, "predictions": predictions}
+
+
 class CanineForMultiLabelClassificationConfig(PretrainedConfig):
     model_type = "CanineMultiLabelClassifier"
     num_labels = 2
 
-    def __init__(self, num_labels = 2, **kwargs):
+    def __init__(self, num_labels=2, **kwargs):
         super().__init__(**kwargs)
         self.num_labels = num_labels
 
@@ -56,7 +70,8 @@ class CanineForMultiLabelClassification(PreTrainedModel):
         self.config = config
         self.canine = CanineModel.from_pretrained("google/canine-c")
         self.dropout = nn.Dropout(0.1)
-        self.classifier = nn.Linear(self.canine.config.hidden_size, self.config.num_labels)
+        self.classifier = nn.Linear(
+            self.canine.config.hidden_size, self.config.num_labels)
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
         # Quick fix for bug in transformers package
@@ -101,7 +116,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     )
 
     df = dataset['train']
-    # df = df.select(range(100_000))
+    df = df.select(range(100_000))
 
     texts_original = df['text']
     labels_original = df['language']
@@ -187,6 +202,8 @@ def finetune_model(
     tokenizer,
     train_dataset,
     eval_dataset,
+    label_encoder,
+    device,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=16,
@@ -210,9 +227,10 @@ def finetune_model(
         load_best_model_at_end=True,
         metric_for_best_model="f1_macro",  # Use F1 macro for multi-label
         logging_dir='./logs',
-        logging_steps=10,
+        logging_steps=100,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
+        report_to="wandb",
     )
 
     def compute_metrics(eval_pred):
@@ -244,6 +262,18 @@ def finetune_model(
         compute_metrics=compute_metrics
     )
 
+    progress_callback = WandbPredictionProgressCallback(
+        model=model,
+        label_encoder=label_encoder,
+        tokenizer=tokenizer,
+        predict=predict,
+        val_dataset=eval_dataset,
+        device=device,
+        num_samples=10,
+        freq=2,
+    )
+    trainer.add_callback(progress_callback)
+
     trainer.train()
 
     trainer.save_model(output_dir)
@@ -260,11 +290,11 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
                         default=42, help="Path to the label encoder")
-    parser.add_argument("--samples-per-language", type=int, default=None,
+    parser.add_argument("--samples-per-language", type=int, default=300,
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=96,
+    parser.add_argument("--batch-size", type=int, default=4,
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
@@ -285,15 +315,26 @@ def main():
         args.samples_per_language, Path(args.encoder_path))
     num_labels = len(mlb.classes_)
 
-    model = CanineForMultiLabelClassification(CanineForMultiLabelClassificationConfig(num_labels=num_labels)).to(device)
+    model = CanineForMultiLabelClassification(
+        CanineForMultiLabelClassificationConfig(num_labels=num_labels)).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
     train_dataset = OpenLIDDataset(train_texts, train_labels)
     eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
 
     logging.info("Finetuning...")
-    finetune_model(model, tokenizer, train_dataset, eval_dataset, output_dir=args.model_path,
-                   num_train_epochs=args.epochs, batch_size=args.batch_size, max_length=args.max_length)
+    finetune_model(
+        model,
+        tokenizer,
+        train_dataset,
+        eval_dataset,
+        device=device,
+        label_encoder=mlb,
+        output_dir=args.model_path,
+        num_train_epochs=args.epochs,
+        batch_size=args.batch_size,
+        max_length=args.max_length
+    )
 
 
 if __name__ == "__main__":

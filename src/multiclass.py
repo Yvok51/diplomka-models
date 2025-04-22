@@ -110,6 +110,7 @@ def finetune_model(
         logging_steps=10,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
+        report_to="wandb",
     )
 
     metric = evaluate.load("accuracy")
