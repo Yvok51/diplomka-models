@@ -66,7 +66,7 @@ def predict_from_file(predict, file, model, tokenizer, label_encoder, device):
 
         predictions = predict(
             line, model, tokenizer, label_encoder, device)
-        languages, confidences = zip(*predictions)
+        languages, confidences = zip(*predictions) if len(predictions) > 0 else [], []
         results.append({"text": line, "languages": languages,
                         "confidences": confidences})
 
@@ -114,8 +114,10 @@ def main():
 
     # Process input file
     logging.info("Processing input file: %s", args.input)
+
+    predict_func = predict_multiclass if args.type == "multiclass" else predict_multilabel
     predicted = predict_from_file(
-        predict_multiclass, args.input, model, tokenizer, label_encoder, device
+        predict_func, args.input, model, tokenizer, label_encoder, device
     )
 
     for item in predicted:
@@ -128,7 +130,7 @@ def main():
 
     if args.correct_label:
         correct = sum(
-            args.correct_label in (item["languages"] for item in predicted))
+            (args.correct_label in item["languages"] for item in predicted))
         print("=== Accuracy ===")
         print(
             f"Accuracy: {correct} / {len(predicted)} = {correct / len(predicted)}")
