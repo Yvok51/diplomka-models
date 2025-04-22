@@ -116,7 +116,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     )
 
     df = dataset['train']
-    df = df.select(range(100_000))
+    # df = df.select(range(100_000))
 
     texts_original = df['text']
     labels_original = df['language']
@@ -290,11 +290,11 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
                         default=42, help="Path to the label encoder")
-    parser.add_argument("--samples-per-language", type=int, default=300,
+    parser.add_argument("--samples-per-language", type=int, default=None,
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=4,
+    parser.add_argument("--batch-size", type=int, default=96,
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
