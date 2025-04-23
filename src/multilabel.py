@@ -227,7 +227,8 @@ def finetune_model(
         load_best_model_at_end=True,
         metric_for_best_model="f1_macro",  # Use F1 macro for multi-label
         logging_dir='./logs',
-        logging_steps=100,
+        logging_strategy="steps",
+        logging_steps=1000,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
         report_to="wandb",
@@ -270,7 +271,7 @@ def finetune_model(
         val_dataset=eval_dataset,
         device=device,
         num_samples=10,
-        freq=2,
+        freq=1,
     )
     trainer.add_callback(progress_callback)
 
