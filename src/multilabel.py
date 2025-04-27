@@ -40,6 +40,9 @@ MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
 SAMPLES_PER_LANGUAGE = 10_000
 SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 
+EVAL_STEPS = 10_000
+LOG_STEPS = 100
+
 
 def predict(dataset, model, tokenizer, encoder, device):
     predictions = []
@@ -48,7 +51,9 @@ def predict(dataset, model, tokenizer, encoder, device):
         results = predict_multilabel(text, model, tokenizer, encoder, device)
         languages, _ = zip(*results) if len(results) > 0 else [], []
         predictions.append(languages)
-        labels.append(encoder.inverse_transform([label])[0])
+
+        text_label = encoder.inverse_transform([label])[0]
+        labels.append(text_label)
 
     return {"labels": labels, "predictions": predictions}
 
@@ -116,7 +121,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     )
 
     df = dataset['train']
-    # df = df.select(range(100_000))
+    # df = df.select(range(10_000))
 
     texts_original = df['text']
     labels_original = df['language']
@@ -148,7 +153,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
         all_texts,
         encoded_labels,
-        test_size=0.1,
+        test_size=0.05,
     )
 
     return train_texts, eval_texts, train_labels, eval_labels, mlb
@@ -216,8 +221,10 @@ def finetune_model(
 
     training_args = TrainingArguments(
         output_dir=output_dir,
-        eval_strategy="epoch",
-        save_strategy="epoch",
+        eval_strategy="steps",
+        eval_steps=EVAL_STEPS,
+        save_strategy="steps",
+        save_steps=EVAL_STEPS,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         learning_rate=learning_rate,
@@ -228,7 +235,7 @@ def finetune_model(
         metric_for_best_model="f1_macro",  # Use F1 macro for multi-label
         logging_dir='./logs',
         logging_strategy="steps",
-        logging_steps=1000,
+        logging_steps=LOG_STEPS,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
         report_to="wandb",
@@ -254,15 +261,6 @@ def finetune_model(
             "recall": recall_micro
         }
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=collator,
-        compute_metrics=compute_metrics
-    )
-
     progress_callback = WandbPredictionProgressCallback(
         model=model,
         label_encoder=label_encoder,
@@ -273,7 +271,16 @@ def finetune_model(
         num_samples=10,
         freq=1,
     )
-    trainer.add_callback(progress_callback)
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        data_collator=collator,
+        compute_metrics=compute_metrics,
+        callbacks=[progress_callback]
+    )
 
     trainer.train()
 
@@ -295,7 +302,7 @@ def main():
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=96,
+    parser.add_argument("--batch-size", type=int, default=128,
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
