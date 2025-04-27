@@ -278,9 +278,10 @@ def finetune_model(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=collator,
-        compute_metrics=compute_metrics,
-        callbacks=[progress_callback]
+        compute_metrics=compute_metrics
     )
+
+    # trainer.add_callback(progress_callback)
 
     trainer.train()
 

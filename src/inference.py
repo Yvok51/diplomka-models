@@ -6,10 +6,13 @@ from collections import Counter
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
 
-from common import load_object
+from common import load_object, PROJECT_PATH
 from multiclass import ENCODER_PATH, MODEL_PATH
 from multilabel import CanineForMultiLabelClassification
 from prediction import predict_multiclass, predict_multilabel
+
+MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch-2_samples-15000"
+ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 
 
 def predict_from_file(predict, file, model, tokenizer, label_encoder, device):
@@ -36,7 +39,7 @@ def predict_from_file(predict, file, model, tokenizer, label_encoder, device):
 def main():
     parser = argparse.ArgumentParser(
         description="Language prediction using finetuned CANINE model")
-    parser.add_argument("--type", choices=["multiclass", "multilabel"], help="The model which we are using")
+    parser.add_argument("--type", choices=["multiclass", "multilabel"], help="The model which we are using", default="multilabel")
     parser.add_argument("--input", type=argparse.FileType('r'), default=sys.stdin,
                         help="Path to input text file (one sentence per line)")
     parser.add_argument(
