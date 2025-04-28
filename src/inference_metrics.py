@@ -36,13 +36,13 @@ def parse_prediction_file(file):
     predicted = []
     for line in file:
         [text, lang] = line.split("\t")
-        predicted.append({"text": text.strip(), "language": lang.strip()})
+        predicted.append({"text": text.strip(), "languages": lang.strip().split(",")})
     return predicted
 
 
 def accuracy(predicted: list[dict[str, str]], gold_label: str):
     correct = sum(
-        (item["language"] == gold_label for item in predicted))
+        (gold_label in item["languages"] for item in predicted))
 
     return correct / len(predicted), correct, len(predicted)
 
@@ -74,19 +74,19 @@ def main():
     args = parser.parse_args()
 
     if args.directory:
-        directory_accuracy(args.directory, get_label=lambda name: name.split("-")[2][:3], glob="*.txt")
+        directory_accuracy(args.directory, get_label=lambda name: name.split("-")[-1][:3], glob="*.txt")
         return
 
     predicted = parse_prediction_file(args.input)
 
-    counter = Counter((item["language"] for item in predicted))
+    counter = Counter((lang for item in predicted for lang in item["languages"]))
     print("=== Language counts ===")
     for lang, count in counter.most_common(args.most_common):
         print(f"{lang}: {count}")
 
     if args.correct:
         correct = sum(
-            (item["language"] == args.correct for item in predicted))
+            (args.correct in item["languages"] for item in predicted))
         print("=== Accuracy ===")
         print(
             f"Accuracy: {correct} / {len(predicted)} = {correct / len(predicted)}")

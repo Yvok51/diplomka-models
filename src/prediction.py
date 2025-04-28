@@ -21,13 +21,11 @@ def predict_multilabel(text, model, tokenizer, label_encoder, device, threshold=
     """Predict the language of a given text using a multilabel model."""
     logits = get_logits(text, model, tokenizer, device)
     probabilities = torch.sigmoid(logits).cpu().numpy()[0]
-    detected_indices = np.where(probabilities > threshold)[0]
+    predicted_labels = (probabilities > threshold)
 
-    results = []
-    for idx in detected_indices:
-        language = label_encoder.inverse_transform([idx])[0]
-        confidence = probabilities[idx]
-        results.append((language, confidence))
+    labels = label_encoder.inverse_transform(np.asarray([predicted_labels.astype(int)]))[0]
+    confidences = probabilities[predicted_labels]
+    results = list(zip(labels, confidences))
 
     results.sort(key=lambda x: x[1], reverse=True)
     return results

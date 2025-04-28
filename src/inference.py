@@ -13,7 +13,7 @@ from multiclass import ENCODER_PATH, MODEL_PATH
 from multilabel import CanineForMultiLabelClassification
 from prediction import predict_multiclass, predict_multilabel
 
-MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch-2_samples-15000"
+MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch-2_samples-10000"
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 
 
@@ -28,9 +28,11 @@ def predict_from_file(predict, file, model, tokenizer, label_encoder, device):
 
         predictions = predict(
             line, model, tokenizer, label_encoder, device)
-        languages, confidences = zip(*predictions) if len(predictions) > 0 else [], []
-        results.append({"text": line, "languages": languages,
-                        "confidences": confidences})
+        unzipped = list(zip(*predictions))
+        languages = unzipped[0] if len(unzipped) > 1 else []
+        confidences = unzipped[1] if len(unzipped) > 1 else []
+        results.append({"text": line, "languages": list(languages),
+                        "confidences": list(confidences)})
 
         if (idx + 1) % 1000 == 0:
             logging.info("Processed %s lines...", idx + 1)
@@ -82,9 +84,9 @@ def main():
                 predicted = predict_from_file(predict_func, f, model, tokenizer, label_encoder, device)
 
             directory = os.path.basename(os.path.dirname(path))
-            with open(f"output_{args.type}/{directory}-{path.name}.txt", 'w', encoding='utf-8') as f:
+            with open(f"output_{args.type}/{directory}-{path.name}", 'w', encoding='utf-8') as f:
                 for item in predicted:
-                    print(item["text"] + "\t" + ",".join(item['languages']), file=args.output)
+                    print(item["text"] + "\t" + ",".join(item['languages']), file=f)
 
         return
 
