@@ -3,6 +3,8 @@ import torch
 import argparse
 import sys
 from collections import Counter
+from pathlib import Path
+import os
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
 
@@ -50,6 +52,7 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--correct-label", default=None, type=str,
                         help="The correct label for the sentences, prints out accuracy if provided")
+    parser.add_argument("--directory", type=str, default=None, help="Run inference on all of the files in a directory")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -70,11 +73,25 @@ def main():
         model = CanineForMultiLabelClassification.from_pretrained(args.model_path).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
+    predict_func = predict_multiclass if args.type == "multiclass" else predict_multilabel
+
+    if args.directory:
+        for path in Path(args.directory).rglob("*.txt"):
+            logging.info("Processing input file: %s", path)
+            with open(path, 'r', encoding='utf-8') as f:
+                predicted = predict_from_file(predict_func, f, model, tokenizer, label_encoder, device)
+
+            directory = os.path.basename(os.path.dirname(path))
+            with open(f"output_{args.type}/{directory}-{path.name}.txt", 'w', encoding='utf-8') as f:
+                for item in predicted:
+                    print(item["text"] + "\t" + ",".join(item['languages']), file=args.output)
+
+        return
+
 
     # Process input file
     logging.info("Processing input file: %s", args.input)
 
-    predict_func = predict_multiclass if args.type == "multiclass" else predict_multilabel
     predicted = predict_from_file(
         predict_func, args.input, model, tokenizer, label_encoder, device
     )
