@@ -133,7 +133,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
         texts_single, labels_single = texts_original, labels_original
 
     texts_multi, labels_multi = create_synthetic_data(
-        texts_original, labels_original, len(texts_single) // 4)
+        texts_original, labels_original, len(texts_single))
 
     # Combine single-language and multi-language samples
     labels_single_as_lists = [[label] for label in labels_single]
@@ -172,11 +172,10 @@ def create_synthetic_data(texts: list[str], labels: list, sample_count: int):
     viable_languages = [lang for lang,
                         texts in language_texts.items() if len(texts) >= SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF]
 
-    num_synthetic_samples = sample_count // 2
     logging.info(
-        "Creating %s synthetic multi-language samples...", num_synthetic_samples)
+        "Creating %s synthetic multi-language samples...", sample_count)
 
-    for _ in range(num_synthetic_samples):
+    for _ in range(sample_count):
         # Select 2-3 random languages
         num_langs = random.randint(2, 3)
         selected_langs = random.sample(viable_languages, num_langs)
