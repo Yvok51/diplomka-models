@@ -22,6 +22,7 @@ from common import (
     OpenLIDDataset,
     OnTheFlyTokenizationCollator,
     sample_dataset,
+    create_language_dict,
     save_object,
     load_object,
     PROJECT_PATH,
@@ -52,8 +53,8 @@ def load_dataset(samples_count: int | None, encoder_path: Path):
 
     if samples_count:
         logging.info("Randomly sampling dataset...")
-        texts, labels = sample_dataset(
-            df['text'], df['language'], samples_count)
+        texts, labels = sample_dataset(create_language_dict(
+            df['text'], df['language']), samples_count)
     else:
         texts, labels = df['text'], df['language']
 

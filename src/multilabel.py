@@ -26,6 +26,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from common import (
     PROJECT_PATH,
     sample_dataset,
+    create_language_dict,
     load_object,
     save_object,
     OpenLIDDataset,
@@ -126,14 +127,15 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     texts_original = df['text']
     labels_original = df['language']
 
+    languages = create_language_dict(texts_original, labels_original)
     if sample_count:
         texts_single, labels_single = sample_dataset(
-            texts_original, labels_original, sample_count)
+            languages, sample_count)
     else:
         texts_single, labels_single = texts_original, labels_original
 
     texts_multi, labels_multi = create_synthetic_data(
-        texts_original, labels_original, len(texts_single))
+        languages, len(texts_single) // 2)
 
     # Combine single-language and multi-language samples
     labels_single_as_lists = [[label] for label in labels_single]
@@ -159,41 +161,35 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     return train_texts, eval_texts, train_labels, eval_labels, mlb
 
 
-def create_synthetic_data(texts: list[str], labels: list, sample_count: int):
+def create_synthetic_data(languages: dict[str, list[str]], sample_count: int):
     texts_multi = []
     labels_multi = []
 
-    # Group texts by language
-    language_texts = defaultdict(list)
-    for idx, label in enumerate(labels):
-        language_texts[label].append(texts[idx])
-
     # Sample languages that have enough samples
     viable_languages = [lang for lang,
-                        texts in language_texts.items() if len(texts) >= SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF]
+                        texts in languages.items() if len(texts) >= SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF]
 
     logging.info(
         "Creating %s synthetic multi-language samples...", sample_count)
 
     for _ in range(sample_count):
-        # Select 2-3 random languages
+        # Select random languages
         num_langs = random.randint(2, 3)
         selected_langs = random.sample(viable_languages, num_langs)
 
         # Sample a text from each language
         sample_texts = []
         for lang in selected_langs:
-            text = random.choice(language_texts[lang])
+            text = random.choice(languages[lang])
             # Take a random fragment (50-100% of original)
             words = text.split()
             if len(words) > 3:  # Only fragment if enough words
                 fragment_size = random.randint(
                     max(1, len(words)//2), len(words))
                 start_idx = random.randint(0, len(words) - fragment_size)
-                text = ' '.join(words[start_idx:start_idx + fragment_size])
-            sample_texts.append(text)
+                words = words[start_idx:start_idx + fragment_size]
+            sample_texts.extend(words)
 
-        # Combine texts
         combined_text = ' '.join(sample_texts)
         texts_multi.append(combined_text)
         labels_multi.append(selected_langs)
