@@ -135,7 +135,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
         texts_single, labels_single = texts_original, labels_original
 
     texts_multi, labels_multi = create_synthetic_data(
-        languages, len(texts_single) // 2)
+        languages, len(texts_single) // 4)
 
     # Combine single-language and multi-language samples
     labels_single_as_lists = [[label] for label in labels_single]
@@ -146,6 +146,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     # Encode multi-labels
     if os.path.exists(ENCODER_PATH):
         mlb = load_object(ENCODER_PATH)
+        assert isinstance(mlb, MultiLabelBinarizer)
         encoded_labels = mlb.transform(all_labels)
     else:
         mlb = MultiLabelBinarizer()
