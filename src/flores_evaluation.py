@@ -6,14 +6,14 @@ import logging
 import datasets
 import torch
 from transformers import CanineForSequenceClassification, CanineTokenizer
-import evaluate
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import confusion_matrix
+from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
+from sklearn.metrics import confusion_matrix, f1_score, multilabel_confusion_matrix
 import numpy as np
 import tqdm
 
 from common import load_object, PROJECT_PATH
-from inference import get_logits
+from prediction import predict_multiclass, predict_multilabel
+from multilabel import CanineForMultiLabelClassification
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
 # Default path to your finetuned model
@@ -48,7 +48,7 @@ def get_test_dataset(known_sentences: list[str] | None = None):
     return data
 
 
-def get_model(model_path, device):
+def get_multiclass_model(model_path, device):
     model = CanineForSequenceClassification.from_pretrained(
         model_path, local_files_only=True).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
@@ -56,7 +56,15 @@ def get_model(model_path, device):
     return model, tokenizer
 
 
-def get_rates(predictions, gold):
+def get_multilabel_model(model_path, device):
+    model = CanineForMultiLabelClassification.from_pretrained(
+        model_path).to(device)
+    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
+
+    return model, tokenizer
+
+
+def get_rates_multiclass(predictions, gold):
     matrix = confusion_matrix(gold, predictions)
     FP = matrix.sum(axis=0) - np.diag(matrix)
     FN = matrix.sum(axis=1) - np.diag(matrix)
@@ -68,15 +76,21 @@ def get_rates(predictions, gold):
     TP = TP.astype(float)
     TN = TN.astype(float)
 
+    return TP, FP, TN, FN
+
+
+def get_rates_multilabel(predictions, gold):
+    matrix = multilabel_confusion_matrix(gold, predictions)
+    FP = matrix[:, 0, 1].astype(float)
+    FN = matrix[:, 1, 0].astype(float)
+    TP = matrix[:, 1, 1].astype(float)
+    TN = matrix[:, 0, 0].astype(float)
 
     return TP, FP, TN, FN
 
 
-def false_positive_rate(predictions, gold):
+def false_positive_rate(predictions, gold, get_rates):
     _, FP, TN, _ = get_rates(predictions, gold)
-
-    FP = FP.sum()
-    TN = TN.sum()
 
     return FP / (FP + TN) if FP + TN > 0 else 0
 
@@ -86,6 +100,8 @@ def main():
         description="Evaluation of language prediction using finetuned CANINE model")
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory of the finetuned model")
+    parser.add_argument("--type", choices=["multiclass", "multilabel"],
+                        help="The model which we are using", default="multiclass")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
@@ -103,45 +119,73 @@ def main():
 
     logging.info("Using device %s", device)
 
-    encoder: LabelEncoder = load_object(args.encoder_path)
-    label_list = np.arange(len(encoder.classes_))
+    encoder: LabelEncoder | MultiLabelBinarizer = load_object(
+        args.encoder_path)
+    assert (isinstance(encoder, LabelEncoder) and args.type == "multiclass") or (
+        isinstance(encoder, MultiLabelBinarizer) and args.type == "multilabel")
 
     logging.info("Loading data...")
     data = get_test_dataset(list(encoder.classes_))
 
-    logging.info("loading model...")
-    model, tokenizer = get_model(args.model_path, device)
+    logging.info("Loading model...")
+    if args.type == "multiclass":
+        model, tokenizer = get_multiclass_model(args.model_path, device)
+        assert isinstance(model, CanineForSequenceClassification)
+    else:
+        model, tokenizer = get_multilabel_model(args.model_path, device)
+        assert isinstance(model, CanineForMultiLabelClassification)
+
+    predict_func = predict_multiclass if args.type == "multiclass" else predict_multilabel
 
     logging.info("Starting predictions...")
-    predictions = defaultdict(lambda: [])
+    predictions: dict[str, list[list[str]]] = defaultdict(list)
     for lang, sentences in tqdm.tqdm(data.items()):
         for sentence in sentences:
-            prediction, _ = get_logits(sentence, model, tokenizer, device)
-            predictions[lang].append(prediction)
+            prediction = predict_func(
+                sentence, model, tokenizer, encoder, device)
+            predicted_langs, _ = list(zip(*prediction))
+            predictions[lang].append(
+                predicted_langs if args.type == "multilabel" else predicted_langs[0])
 
     logging.info("Starting evaluations...")
-    F1_metric = evaluate.load("f1")
-    metrics = [
-        (lambda predictions, gold: F1_metric.compute(predictions=predictions, references=gold, average='macro')["f1"], {}, "F1"),
-        (lambda predictions, gold: false_positive_rate(np.asarray(predictions), np.asarray(gold)), {}, "FPR")
+    metrics: list = [
+        (lambda predictions, gold: f1_score(
+            y_pred=predictions,
+            y_true=gold,
+            average=None,
+            zero_division=0), "F1"),
+        (lambda predictions, gold: false_positive_rate(
+            np.asarray(predictions),
+            np.asarray(gold),
+            get_rates_multiclass if args.type == "multiclass" else get_rates_multilabel
+        ), "FPR")
     ]
 
     total_predictions = []
     total_labels = []
     for lang, predicted in tqdm.tqdm(predictions.items()):
+        encoded_predicted = encoder.transform(predicted)
         correct = encoder.transform([lang])[0]
-        labels = np.full(shape=len(predicted),
-                         fill_value=correct, dtype=int)
+        if args.type == "multiclass":
+            labels = np.full(shape=len(predicted),
+                             fill_value=correct, dtype=int)
+        else:
+            labels = np.full(
+                shape=(len(predicted), *correct.shape), fill_value=correct, dtype=int)
 
-        for metric, results, name in metrics:
-            results[lang] = metric(predicted, labels)
-            print(f"{name},{lang},{results[lang]}", file=args.output)
-
-        total_predictions.extend(predicted)
+        total_predictions.extend(encoded_predicted)
         total_labels.extend(labels)
 
-    for metric, results, name in metrics:
-        print(f"{name},all,{metric(total_predictions, total_labels)}", file=args.output)
+    total_labels = np.asarray(total_labels)
+    total_predictions = np.asarray(total_predictions)
+
+    for metric, name in metrics:
+        values = metric(total_predictions, total_labels)
+        for idx, lang in enumerate(encoder.classes_):
+            print(f"{name},{lang},{values[idx]}",
+                  file=args.output)
+
+        print(f"{name},all,{np.average(values)}", file=args.output)
 
 
 if __name__ == "__main__":
