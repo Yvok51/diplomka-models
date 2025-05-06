@@ -44,6 +44,48 @@ SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 EVAL_STEPS = 3_000
 LOG_STEPS = 100
 
+class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
+    def __init__(self, texts, labels, synthetic_proportion: float = 1):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.texts = np.asarray(texts)
+        self.labels = torch.tensor(labels, dtype=torch.long).to(self.device)
+        self.synthetic_proportion = synthetic_proportion
+        self.length = int(len(self.labels) + self.synthetic_proportion * len(self.labels))
+
+    def __getitem__(self, idx):
+        if idx < len(self.labels):
+            return {"text": self.texts[idx], "label": self.labels[idx]}
+        else:
+            num_samples = np.random.randint(2, 3)
+            indices = np.random.randint(len(self.labels), size=num_samples)
+
+            label = torch.clamp(self.labels[indices].sum(dim=0), 0, 1) # logical and
+
+            final_text = []
+            for i in indices:
+                text = self.texts[i]
+                words = text.split()
+                if len(words) > 3:  # Only fragment if enough words
+                    fragment_size = np.random.randint(
+                        max(1, len(words) // num_samples), len(words))
+                    start_idx = random.randint(0, len(words) - fragment_size)
+                    words = words[start_idx:start_idx + fragment_size]
+                final_text.extend(words)
+
+            return {"text": " ".join(final_text), "label": label}
+
+
+
+    def __len__(self):
+        return self.length
+
+    def random_subset(self, n=1):
+        indices = np.asarray([np.random.randint(0, len(self.texts)) for _ in range(n)])
+        texts = self.texts[indices]
+        labels = self.labels[indices]
+
+        return SyntheticOpenLIDDataset(texts, labels)
+
 
 def predict(dataset, model, tokenizer, encoder, device):
     predictions = []
@@ -127,34 +169,25 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     texts_original = df['text']
     labels_original = df['language']
 
-    languages = create_language_dict(texts_original, labels_original)
     if sample_count:
         texts_single, labels_single = sample_dataset(
-            languages, sample_count)
+            create_language_dict(texts_original, labels_original), sample_count)
     else:
         texts_single, labels_single = texts_original, labels_original
 
-    texts_multi, labels_multi = create_synthetic_data(
-        languages, len(texts_single) // 4)
-
-    # Combine single-language and multi-language samples
-    labels_single_as_lists = [[label] for label in labels_single]
-
-    all_texts = texts_single + texts_multi
-    all_labels = labels_single_as_lists + labels_multi
 
     # Encode multi-labels
     if os.path.exists(ENCODER_PATH):
         mlb = load_object(ENCODER_PATH)
         assert isinstance(mlb, MultiLabelBinarizer)
-        encoded_labels = mlb.transform(all_labels)
+        encoded_labels = mlb.transform(labels_single)
     else:
         mlb = MultiLabelBinarizer()
-        encoded_labels = mlb.fit_transform(all_labels)
+        encoded_labels = mlb.fit_transform(labels_single)
         save_object(mlb, ENCODER_PATH)
 
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
-        all_texts,
+        texts_single,
         encoded_labels,
         test_size=0.05,
     )
@@ -303,6 +336,7 @@ def main():
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
+    parser.add_argument("--synthetic-proportion", type=float, default=1., help="The proportion of synthetic data to use")
     args = parser.parse_args()
 
     load_dotenv()
@@ -324,8 +358,8 @@ def main():
         CanineForMultiLabelClassificationConfig(num_labels=num_labels)).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
-    train_dataset = OpenLIDDataset(train_texts, train_labels)
-    eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
+    train_dataset = SyntheticOpenLIDDataset(train_texts, train_labels, args.synthetic_proportion)
+    eval_dataset = SyntheticOpenLIDDataset(eval_texts, eval_labels, args.synthetic_proportion)
 
     logging.info("Finetuning...")
     finetune_model(

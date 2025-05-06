@@ -3,6 +3,7 @@ from collections import defaultdict
 from pathlib import Path
 import pickle
 import os
+import logging
 
 import torch
 import numpy as np
@@ -58,6 +59,7 @@ def create_language_dict(texts: list[str], labels: list[str]):
 
 
 def sample_dataset(languages: dict[str, list[str]], samples_per_language: int):
+    logging.info("Sampling %s samples per language", samples_per_language)
     new_texts = []
     new_labels = []
     for language, lang_texts in languages.items():
