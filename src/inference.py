@@ -7,13 +7,14 @@ from pathlib import Path
 import os
 
 from transformers import CanineTokenizer, CanineForSequenceClassification
+from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 
 from common import load_object, PROJECT_PATH
 from multiclass import ENCODER_PATH, MODEL_PATH
 from multilabel import CanineForMultiLabelClassification
 from prediction import predict_multiclass, predict_multilabel
 
-MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch-2_samples-10000"
+MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch-2_samples-15000"
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 
 
@@ -65,8 +66,9 @@ def main():
 
     logging.info("Loading label encoder from %s", args.encoder_path)
     label_encoder = load_object(args.encoder_path)
+    assert (isinstance(label_encoder, LabelEncoder) and args.type == "multiclass") or (
+        isinstance(label_encoder, MultiLabelBinarizer) and args.type == "multilabel")
 
-    # Load model and tokenizer
     logging.info("Loading model from %s", args.model_path)
     if args.type == "multiclass":
         model = CanineForSequenceClassification.from_pretrained(

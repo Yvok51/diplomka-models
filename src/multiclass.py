@@ -62,6 +62,7 @@ def load_dataset(samples_count: int | None, encoder_path: Path):
     # Encode language labels
     if os.path.exists(encoder_path):
         label_encoder: LabelEncoder = load_object(encoder_path)
+        assert isinstance(label_encoder, LabelEncoder)
         encoded_labels = label_encoder.transform(labels)
     else:
         label_encoder = LabelEncoder()
