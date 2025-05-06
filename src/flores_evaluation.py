@@ -92,7 +92,7 @@ def get_rates_multilabel(predictions, gold):
 def false_positive_rate(predictions, gold, get_rates):
     _, FP, TN, _ = get_rates(predictions, gold)
 
-    return FP / (FP + TN) if FP + TN > 0 else 0
+    return FP / (FP + TN)
 
 
 def main():
@@ -138,12 +138,13 @@ def main():
     predict_func = predict_multiclass if args.type == "multiclass" else predict_multilabel
 
     logging.info("Starting predictions...")
+    # The actual predicted labels for different languages
     predictions: dict[str, list[list[str]]] = defaultdict(list)
     for lang, sentences in tqdm.tqdm(data.items()):
         for sentence in sentences:
             prediction = predict_func(
                 sentence, model, tokenizer, encoder, device)
-            predicted_langs, _ = list(zip(*prediction))
+            predicted_langs = list(zip(*prediction))[0] if len(prediction) > 0 else []
             predictions[lang].append(
                 predicted_langs if args.type == "multilabel" else predicted_langs[0])
 
@@ -165,7 +166,7 @@ def main():
     total_labels = []
     for lang, predicted in tqdm.tqdm(predictions.items()):
         encoded_predicted = encoder.transform(predicted)
-        correct = encoder.transform([lang])[0]
+        correct = encoder.transform([lang] if args.type == "multiclass" else [[lang]])[0]
         if args.type == "multiclass":
             labels = np.full(shape=len(predicted),
                              fill_value=correct, dtype=int)
