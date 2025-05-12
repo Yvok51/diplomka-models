@@ -10,4 +10,4 @@ matplotlib
 PyQt6 # needed for my linux for matplotlib
 tqdm
 wandb
-
+lang2vec
