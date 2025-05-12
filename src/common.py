@@ -20,7 +20,7 @@ def get_tokenized_inputs_path(max_length):
 class OpenLIDDataset(torch.utils.data.Dataset):
     def __init__(self, texts, labels):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.texts = np.asarray(texts)
+        self.texts = texts
         self.labels = torch.tensor(labels, dtype=torch.long).to(self.device)
 
     def __getitem__(self, idx):
@@ -31,7 +31,7 @@ class OpenLIDDataset(torch.utils.data.Dataset):
 
     def random_subset(self, n=1):
         indices = np.asarray([np.random.randint(0, len(self.texts)) for _ in range(n)])
-        texts = self.texts[indices]
+        texts = np.asarray(self.texts)[indices]
         labels = self.labels[indices]
 
         return OpenLIDDataset(texts, labels)
@@ -193,3 +193,6 @@ class WandbPredictionProgressCallback(WandbCallback):
             # log the table to wandb
             self._wandb.log({"sample_predictions": records_table})
 
+
+def flores_to_iso(flores_label: str):
+    return flores_label[:3]
