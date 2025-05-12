@@ -1,5 +1,5 @@
  #!/bin/bash
-#PBS -N batch_job_example
+#PBS -N Multiclass langID
 #PBS -l select=1:ncpus=8:ngpus=1:mem=256gb:scratch_local=10gb:gpu_mem=17gb
 #PBS -l walltime=240:00:00
 
@@ -21,4 +21,4 @@ git pull
 venv/bin/pip install -r requirements.txt
 venv/bin/pip install -r requirements-pytorch.txt
 
-venv/bin/python3 src/multiclass.py --epochs 1 --batch-size 128
+venv/bin/python3 src/multiclass.py --epochs 1 --batch-size 128 --model-path long_multiclass_output
