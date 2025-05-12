@@ -1,5 +1,5 @@
  #!/bin/bash
-#PBS -N Multiclass langID
+#PBS -N multiclass_langID
 #PBS -l select=1:ncpus=8:ngpus=1:mem=256gb:scratch_local=10gb:gpu_mem=17gb
 #PBS -l walltime=240:00:00
 
