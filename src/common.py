@@ -195,4 +195,4 @@ class WandbPredictionProgressCallback(WandbCallback):
 
 
 def flores_to_iso(flores_label: str):
-    return flores_label[:3]
+    return str(flores_label[:3])
