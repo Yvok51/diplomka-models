@@ -29,7 +29,6 @@ from common import (
     create_language_dict,
     load_object,
     save_object,
-    OpenLIDDataset,
     OnTheFlyTokenizationCollator,
     WandbPredictionProgressCallback,
     flores_to_iso,
@@ -82,7 +81,8 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
         return self.length
 
     def random_subset(self, n=1):
-        indices = np.asarray([np.random.randint(0, len(self.texts)) for _ in range(n)])
+        indices = np.asarray(
+            [np.random.randint(0, len(self.texts)) for _ in range(n)])
         texts = np.asarray(self.texts)[indices]
         labels = self.labels[indices]
 
@@ -94,10 +94,8 @@ def normalize_by_row(matrix: np.ndarray):
     return minmax_scale(matrix, (0, 1), axis=1, copy=True)
     # return np.nan_to_num(matrix / np.max(np.abs(matrix), axis=1)[:, None])
 
+
 class NegativeSamplingBCELoss(nn.Module):
-    @classmethod
-    def get_vector(cls, language):
-        pass
 
     @classmethod
     def calculate_similarity(cls, classes: list[str]):
@@ -110,10 +108,13 @@ class NegativeSamplingBCELoss(nn.Module):
         """
         iso_names = np.asarray([flores_to_iso(c) for c in classes])
 
-        learned_mask = np.asarray([lang in l2v.available_learned_languages() for lang in iso_names])
-        learned_feat = l2v.get_features(list(iso_names[learned_mask]), "learned")
+        learned_mask = np.asarray(
+            [lang in l2v.available_learned_languages() for lang in iso_names])
+        learned_feat = l2v.get_features(
+            list(iso_names[learned_mask]), "learned")
         # Get the learned vector representations of languages and set the vectors to all zero if they are not available
-        learned = np.asarray([learned_feat[lang] if lang in learned_feat else np.zeros((512,)) for lang in iso_names])
+        learned = np.asarray([learned_feat[lang] if lang in learned_feat else np.zeros(
+            (512,)) for lang in iso_names])
         # Dot product of each language vector with all others
         learned_mask_mat = learned_mask @ learned_mask.T
         learned_mat = normalize_by_row(learned @ learned.T)
@@ -126,7 +127,7 @@ class NegativeSamplingBCELoss(nn.Module):
         # Use the learned similarity with the family similarity as backup
         return np.where(learned_mask_mat, learned_mat, family_mat)
 
-    def __init__(self, classes, device, neg_sample_ratio=5.0):
+    def __init__(self, classes, device="cuda" if torch.cuda.is_available() else "cpu", neg_sample_ratio=5.0):
         """
         Initialize negative sampling loss
 
@@ -137,9 +138,8 @@ class NegativeSamplingBCELoss(nn.Module):
         super(NegativeSamplingBCELoss, self).__init__()
         self.neg_sample_ratio = neg_sample_ratio
         self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
-        self.idx_to_class = classes
-        self.class_to_idx = {lang: idx for idx, lang in enumerate(classes)}
-        self.similarity = torch.Tensor(NegativeSamplingBCELoss.calculate_similarity(classes)).to(device)
+        self.similarity = torch.Tensor(
+            NegativeSamplingBCELoss.calculate_similarity(classes)).to(device)
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor):
         """
@@ -154,7 +154,8 @@ class NegativeSamplingBCELoss(nn.Module):
         num_positives = positive_mask.sum(dim=1, keepdim=True)
 
         # Calculate how many negative samples to keep per instance
-        num_negative_samples = torch.floor(torch.clip(num_positives, min=1).squeeze() * self.neg_sample_ratio)
+        num_negative_samples = torch.floor(torch.clip(
+            num_positives, min=1).squeeze() * self.neg_sample_ratio)
 
         # For each instance, randomly select negative samples
         neg_sample_mask = torch.zeros_like(negative_mask)
@@ -171,11 +172,13 @@ class NegativeSamplingBCELoss(nn.Module):
                     int(num_negative_samples[i].item()), neg_indices.size(0))
 
                 # Average the similarity of the various languages in the instance
-                average_similarity = torch.nan_to_num(torch.mean(self.similarity[positive_mask[i].bool()], dim=0))
+                average_similarity = torch.nan_to_num(torch.mean(
+                    self.similarity[positive_mask[i].bool()], dim=0))
                 # We actually want the least similar languages to be selected more often
                 inverse_similarity = 1 - average_similarity
 
-                similarity_negative_samples = inverse_similarity[negative_mask[i].bool()]
+                similarity_negative_samples = inverse_similarity[negative_mask[i].bool(
+                )]
                 probabilities = similarity_negative_samples / similarity_negative_samples.sum()
 
                 # Randomly select negative samples
@@ -218,14 +221,13 @@ def predict(dataset, model, tokenizer, encoder, device):
 
 class CanineForMultiLabelClassificationConfig(PretrainedConfig):
     model_type = "CanineMultiLabelClassifier"
-    num_labels = 2
-    loss = nn.BCEWithLogitsLoss()
+    classes: list[str] = []
+    negative_sampling = False
 
-    def __init__(self, num_labels=2, loss=nn.BCEWithLogitsLoss(), **kwargs):
+    def __init__(self, classes=[], negative_sampling=False, **kwargs):
         super().__init__(**kwargs)
-        self.num_labels = num_labels
-        self.loss = loss
-
+        self.classes = classes
+        self.negative_sampling = negative_sampling
 
 class CanineForMultiLabelClassification(PreTrainedModel):
     config_class = CanineForMultiLabelClassificationConfig
@@ -236,8 +238,9 @@ class CanineForMultiLabelClassification(PreTrainedModel):
         self.canine = CanineModel.from_pretrained("google/canine-c")
         self.dropout = nn.Dropout(0.1)
         self.classifier = nn.Linear(
-            self.canine.config.hidden_size, self.config.num_labels)
-        self.loss = config.loss
+            self.canine.config.hidden_size, len(self.config.classes))
+        self.loss = NegativeSamplingBCELoss(
+            config.classes) if config.negative_sampling else nn.BCEWithLogitsLoss()
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
         # Quick fix for bug in transformers package
@@ -281,7 +284,7 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
     )
 
     df = dataset['train']
-    df = df.select(range(10_000))
+    # df = df.select(range(10_000))
 
     texts_original = df['text']
     labels_original = df['language']
@@ -383,7 +386,7 @@ def finetune_model(
         logging_steps=LOG_STEPS,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
-        report_to="none", # "wandb",
+        report_to="wandb",
     )
 
     def compute_metrics(eval_pred):
@@ -448,13 +451,13 @@ def main():
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=4,
+    parser.add_argument("--batch-size", type=int, default=128,
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
     parser.add_argument("--synthetic-proportion", type=float,
                         default=1., help="The proportion of synthetic data to use")
-    parser.add_argument("--negative-sampling", default=True, action="store_true",
+    parser.add_argument("--negative-sampling", default=False, action="store_true",
                         help="Whether to use negative sampling based on the languages proximity")
     args = parser.parse_args()
 
@@ -471,13 +474,11 @@ def main():
 
     train_texts, eval_texts, train_labels, eval_labels, mlb = prepare_multilabel_dataset(
         args.samples_per_language, Path(args.encoder_path))
-    num_labels = len(mlb.classes_)
 
     model = CanineForMultiLabelClassification(
         CanineForMultiLabelClassificationConfig(
-            num_labels=num_labels,
-            loss=NegativeSamplingBCELoss(
-                mlb.classes_, device) if args.negative_sampling else nn.BCEWithLogitsLoss()
+            classes=mlb.classes_.tolist(),
+            negative_sampling=args.negative_sampling
         )
     ).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
