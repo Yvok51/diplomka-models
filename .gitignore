@@ -5,4 +5,5 @@ venv/
 finetuned*/
 trainer_output/
 **/__pycache__/
-output/
+output*/
+wandb/

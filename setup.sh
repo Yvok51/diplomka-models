@@ -1,3 +1,4 @@
+#!/bin/bash
 
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
@@ -8,3 +9,5 @@ LV_LIB="${SITE_PACKAGES}/lang2vec/data"
 LV_DISTANCES="${LV_LIB}/distances.zip"
 curl http://www.cs.cmu.edu/~aanastas/files/distances.zip --output "${LV_DISTANCES}"
 unzip "${LV_DISTANCES}" -d "${LV_LIB}"
+
+./install.sh
