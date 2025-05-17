@@ -1,7 +1,7 @@
- #!/bin/bash
+#!/bin/bash
 #PBS -N multiclass_langID
 #PBS -l select=1:ncpus=8:ngpus=1:mem=256gb:scratch_local=10gb:gpu_mem=17gb
-#PBS -l walltime=240:00:00
+#PBS -l walltime=300:00:00
 
 # define a DATADIR variable: directory where the input files are taken from and where the output will be copied to
 MYHOME=/storage/brno2/home/michal-tichy
@@ -13,8 +13,8 @@ echo "$PBS_JOBID is running on node `hostname -f` in a scratch directory $SCRATC
 
 module add python/python-3.10.4-intel-19.0.4-sc7snnf
 
-export HOME=$MYHOME
-export TMPDIR=$SCRATCHDIR
+export HOME="${MYHOME}"
+export TMPDIR="${SCRATCHDIR}"
 cd $DATADIR
 
 git pull
