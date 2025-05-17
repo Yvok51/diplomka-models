@@ -433,6 +433,8 @@ def finetune_model(
 
     trainer.train()
 
+    logging.info("Saving the model...")
+
     trainer.save_model(output_dir)
 
     return model
