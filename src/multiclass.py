@@ -36,6 +36,8 @@ MODEL_PATH = PROJECT_PATH / "finetuned"  # Default path to your finetuned model
 
 SAMPLES_PER_LANGUAGE = 10_000
 
+EVAL_STEPS = 5_000
+LOG_STEPS = 100
 
 def load_dataset(samples_count: int | None, encoder_path: Path):
     dataset = datasets.load_dataset(
@@ -73,7 +75,7 @@ def load_dataset(samples_count: int | None, encoder_path: Path):
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
         texts,
         encoded_labels,
-        test_size=0.1,
+        test_size=0.05,
     )
 
     return train_texts, eval_texts, train_labels, eval_labels, label_encoder
@@ -99,8 +101,11 @@ def finetune_model(
             tokenizer=tokenizer, max_length=max_length)
 
     training_args = TrainingArguments(
-        eval_strategy="epoch",
-        save_strategy="epoch",
+        output_dir=output_dir,
+        eval_strategy="steps",
+        eval_steps=EVAL_STEPS,
+        save_strategy="steps",
+        save_steps=EVAL_STEPS,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         learning_rate=learning_rate,
@@ -109,7 +114,8 @@ def finetune_model(
         save_total_limit=3,
         load_best_model_at_end=True,
         logging_dir='./logs',
-        logging_steps=10,
+        logging_strategy="steps",
+        logging_steps=LOG_STEPS,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
         report_to="wandb",
@@ -133,6 +139,8 @@ def finetune_model(
     )
 
     trainer.train()
+
+    logging.info("Saving the model...")
 
     trainer.save_model(output_dir)
 
