@@ -19,5 +19,5 @@ cd $DATADIR
 
 git pull
 
-venv/bin/python3 src/multilabel.py --samples-per-language 20000 --model-path "multilabel_synthetic_${1}_output" --synthetic-proportion "${1}"
+venv/bin/python3 src/multilabel.py --samples-per-language 20000 --model-path "multilabel_synthetic_${PORTION}_output" --synthetic-proportion "${PORTION}"
 
