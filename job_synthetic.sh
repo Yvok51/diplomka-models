@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N multilabel_synthetic_langID
 #PBS -l select=1:ncpus=8:ngpus=1:mem=256gb:scratch_local=10gb:gpu_mem=16gb
-#PBS -l walltime=16:00:00
+#PBS -l walltime=20:00:00
 
 # define a DATADIR variable: directory where the input files are taken from and where the output will be copied to
 MYHOME=/storage/brno2/home/michal-tichy
@@ -19,5 +19,7 @@ cd $DATADIR
 
 git pull
 
-venv/bin/python3 src/multilabel.py --samples-per-language 20000 --model-path "multilabel_synthetic_${PORTION}_output" --synthetic-proportion "${PORTION}"
+MODEL_PATH="multilabel_synthetic_${PORTION}_output"
+venv/bin/python3 src/multilabel.py --samples-per-language 20000 --model-path "${MODEL_PATH}" --synthetic-proportion "${PORTION}"
+python3 src/flores_evaluation.py --model-path "${MODEL_PATH}" --type multilabel --encoder-path trainer_output/multilabel_encoder.pkl --output "results/flores_synthetic_${PORTION}.txt"
 
