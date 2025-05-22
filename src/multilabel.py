@@ -232,7 +232,7 @@ def prepare_multilabel_dataset(sample_count: int, encoder_path=None):
     )
 
     df = dataset['train']
-    # df = df.select(range(10_000))
+    df = df.select(range(10_000))
 
     texts_original = df['text']
     labels_original = df['language']
@@ -247,10 +247,10 @@ def prepare_multilabel_dataset(sample_count: int, encoder_path=None):
     if os.path.exists(encoder_path):
         mlb = load_object(encoder_path)
         assert isinstance(mlb, MultiLabelBinarizer)
-        encoded_labels = mlb.transform(labels_single)
+        encoded_labels = mlb.transform(([label] for label in labels_single))
     else:
         mlb = MultiLabelBinarizer()
-        encoded_labels = mlb.fit_transform(labels_single)
+        encoded_labels = mlb.fit_transform(([label] for label in labels_single))
         save_object(mlb, ENCODER_PATH)
 
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
@@ -334,7 +334,7 @@ def finetune_model(
         logging_steps=LOG_STEPS,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
-        report_to="wandb",
+        report_to="none", # "wandb",
     )
 
     def compute_metrics(eval_pred):
@@ -402,7 +402,7 @@ def main():
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=128,
+    parser.add_argument("--batch-size", type=int, default=4,
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
