@@ -44,7 +44,8 @@ def predict_from_file(predict, file, model, tokenizer, label_encoder, device):
 def main():
     parser = argparse.ArgumentParser(
         description="Language prediction using finetuned CANINE model")
-    parser.add_argument("--type", choices=["multiclass", "multilabel"], help="The model which we are using", default="multilabel")
+    parser.add_argument("--type", choices=["multiclass", "multilabel"],
+                        help="The model which we are using", default="multilabel")
     parser.add_argument("--input", type=argparse.FileType('r'), default=sys.stdin,
                         help="Path to input text file (one sentence per line)")
     parser.add_argument(
@@ -55,7 +56,8 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--correct-label", default=None, type=str,
                         help="The correct label for the sentences, prints out accuracy if provided")
-    parser.add_argument("--directory", type=str, default=None, help="Run inference on all of the files in a directory")
+    parser.add_argument("--directory", type=str, default=None,
+                        help="Run inference on all of the files in a directory")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -74,7 +76,8 @@ def main():
         model = CanineForSequenceClassification.from_pretrained(
             args.model_path).to(device)
     else:
-        model = CanineForMultiLabelClassification.from_pretrained(args.model_path).to(device)
+        model = CanineForMultiLabelClassification.from_pretrained(
+            args.model_path).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
     predict_func = predict_multiclass if args.type == "multiclass" else predict_multilabel
@@ -83,15 +86,16 @@ def main():
         for path in Path(args.directory).rglob("*.txt"):
             logging.info("Processing input file: %s", path)
             with open(path, 'r', encoding='utf-8') as f:
-                predicted = predict_from_file(predict_func, f, model, tokenizer, label_encoder, device)
+                predicted = predict_from_file(
+                    predict_func, f, model, tokenizer, label_encoder, device)
 
             directory = os.path.basename(os.path.dirname(path))
             with open(f"output_{args.type}/{directory}-{path.name}", 'w', encoding='utf-8') as f:
                 for item in predicted:
-                    print(item["text"] + "\t" + ",".join(item['languages']), file=f)
+                    print(item["text"] + "\t" +
+                          ",".join(item['languages']), file=f)
 
         return
-
 
     # Process input file
     logging.info("Processing input file: %s", args.input)
@@ -101,9 +105,11 @@ def main():
     )
 
     for item in predicted:
-        print(item["text"] + "\t" + ",".join(item['languages']), file=args.output)
+        print(item["text"] + "\t" +
+              ",".join(item['languages']), file=args.output)
 
-    counter = Counter((lang for item in predicted for lang in item["languages"]))
+    counter = Counter(
+        (lang for item in predicted for lang in item["languages"]))
     print("=== Language counts ===")
     for lang, count in counter.most_common(5):
         print(f"{lang}: {count}")

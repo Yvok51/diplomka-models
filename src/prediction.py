@@ -6,6 +6,7 @@ from common import tokenize_input
 
 MULTILABEL_THRESHOLD = 0.5
 
+
 def get_logits(text, model, tokenizer, device):
     """Get logits from a model"""
     inputs = tokenize_input(text, tokenizer)
@@ -23,7 +24,8 @@ def predict_multilabel(text, model, tokenizer, label_encoder, device, threshold=
     probabilities = torch.sigmoid(logits).cpu().numpy()[0]
     predicted_labels = (probabilities > threshold)
 
-    labels = label_encoder.inverse_transform(np.asarray([predicted_labels.astype(int)]))[0]
+    labels = label_encoder.inverse_transform(
+        np.asarray([predicted_labels.astype(int)]))[0]
     confidences = probabilities[predicted_labels]
     results = list(zip(labels, confidences))
 
@@ -42,4 +44,3 @@ def predict_multiclass(text, model, tokenizer, label_encoder, device):
     confidence = probs[0][prediction].item()
 
     return [(language, confidence)]
-

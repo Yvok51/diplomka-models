@@ -14,10 +14,10 @@ from transformers import (
     PretrainedConfig,
     set_seed,
 )
-import datasets
 import numpy as np
 import torch
 import torch.nn as nn
+import datasets
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer, minmax_scale
 from sklearn.metrics import f1_score, precision_score, recall_score
@@ -29,11 +29,12 @@ from common import (
     create_language_dict,
     load_object,
     save_object,
-    OnTheFlyTokenizationCollator,
     WandbPredictionProgressCallback,
     flores_to_iso,
 )
 from prediction import predict_multilabel
+from LID_datasets import SyntheticOpenLIDDataset
+from collators import OnTheFlyTokenizationCollator
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
@@ -43,50 +44,6 @@ SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 
 EVAL_STEPS = 5_000
 LOG_STEPS = 100
-
-
-class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
-    def __init__(self, texts, labels, synthetic_proportion: float = 1):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.texts = texts
-        self.labels = torch.tensor(labels, dtype=torch.long).to(self.device)
-        self.synthetic_proportion = synthetic_proportion
-        self.length = int(len(self.labels) +
-                          self.synthetic_proportion * len(self.labels))
-
-    def __getitem__(self, idx):
-        if idx < len(self.labels):
-            return {"text": self.texts[idx], "label": self.labels[idx]}
-        else:
-            num_samples = np.random.randint(2, 3)
-            indices = np.random.randint(len(self.labels), size=num_samples)
-
-            label = torch.clamp(self.labels[indices].sum(
-                dim=0), 0, 1)  # logical and
-
-            final_text = []
-            for i in indices:
-                text = self.texts[i]
-                words = text.split()
-                if len(words) > 3:  # Only fragment if enough words
-                    fragment_size = np.random.randint(
-                        max(1, len(words) // num_samples), len(words))
-                    start_idx = random.randint(0, len(words) - fragment_size)
-                    words = words[start_idx:start_idx + fragment_size]
-                final_text.extend(words)
-
-            return {"text": " ".join(final_text), "label": label}
-
-    def __len__(self):
-        return self.length
-
-    def random_subset(self, n=1):
-        indices = np.asarray(
-            [np.random.randint(0, len(self.texts)) for _ in range(n)])
-        texts = np.asarray(self.texts)[indices]
-        labels = self.labels[indices]
-
-        return SyntheticOpenLIDDataset(texts, labels)
 
 
 def normalize_by_row(matrix: np.ndarray):
@@ -150,17 +107,14 @@ class NegativeSamplingBCELoss(nn.Module):
         positive_mask = targets.eq(1).float()
         negative_mask = targets.eq(0).float()
 
-        # Count positive samples per instance
         num_positives = positive_mask.sum(dim=1, keepdim=True)
 
-        # Calculate how many negative samples to keep per instance
         num_negative_samples = torch.floor(torch.clip(
             num_positives, min=1).squeeze() * self.neg_sample_ratio)
 
         # For each instance, randomly select negative samples
         neg_sample_mask = torch.zeros_like(negative_mask)
-        for i in range(logits.size(0)):  # For each instance in the batch
-            # Find indices of negative examples for this instance
+        for i in range(logits.size(0)):
             neg_indices = torch.nonzero(negative_mask[i]).squeeze()
 
             if neg_indices.dim() == 0 and neg_indices.size(0) > 0:
@@ -181,7 +135,6 @@ class NegativeSamplingBCELoss(nn.Module):
                 )]
                 probabilities = similarity_negative_samples / similarity_negative_samples.sum()
 
-                # Randomly select negative samples
                 selected_indices = np.random.choice(
                     neg_indices.cpu().numpy(),
                     size=samples_to_keep,
@@ -189,19 +142,13 @@ class NegativeSamplingBCELoss(nn.Module):
                     p=probabilities.cpu().numpy()
                 )
 
-                # Mark the selected negative samples
+                # mark the negative samples to use
                 neg_sample_mask[i, selected_indices] = 1.0
 
-        # Final mask combines positive examples and selected negative examples
         final_mask = positive_mask + neg_sample_mask
-
-        # Calculate BCE loss for all examples
         element_wise_loss = self.bce_loss(logits, targets)
-
-        # Apply the mask to only include positive and selected negative examples
         masked_loss = element_wise_loss * final_mask
 
-        # Average the loss over the number of considered examples
         return masked_loss.sum() / final_mask.sum()
 
 
@@ -228,6 +175,7 @@ class CanineForMultiLabelClassificationConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.classes = classes
         self.negative_sampling = negative_sampling
+
 
 class CanineForMultiLabelClassification(PreTrainedModel):
     config_class = CanineForMultiLabelClassificationConfig

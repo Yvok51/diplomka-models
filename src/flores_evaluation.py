@@ -15,9 +15,9 @@ from common import load_object, PROJECT_PATH
 from prediction import predict_multiclass, predict_multilabel
 from multilabel import CanineForMultiLabelClassification
 
-ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
+ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 # Default path to your finetuned model
-MODEL_PATH = PROJECT_PATH / "finetuned_epoch-2_samples-15000"
+MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch_1_samples-20000_synthetic_0"
 
 
 class FLORESDataset(torch.utils.data.Dataset):
@@ -101,7 +101,7 @@ def main():
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory of the finetuned model")
     parser.add_argument("--type", choices=["multiclass", "multilabel"],
-                        help="The model which we are using", default="multiclass")
+                        help="The model which we are using", default="multilabel")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
@@ -144,7 +144,8 @@ def main():
         for sentence in sentences:
             prediction = predict_func(
                 sentence, model, tokenizer, encoder, device)
-            predicted_langs = list(zip(*prediction))[0] if len(prediction) > 0 else []
+            predicted_langs = list(
+                zip(*prediction))[0] if len(prediction) > 0 else []
             predictions[lang].append(
                 predicted_langs if args.type == "multilabel" else predicted_langs[0])
 
@@ -166,7 +167,8 @@ def main():
     total_labels = []
     for lang, predicted in tqdm.tqdm(predictions.items()):
         encoded_predicted = encoder.transform(predicted)
-        correct = encoder.transform([lang] if args.type == "multiclass" else [[lang]])[0]
+        correct = encoder.transform(
+            [lang] if args.type == "multiclass" else [[lang]])[0]
         if args.type == "multiclass":
             labels = np.full(shape=len(predicted),
                              fill_value=correct, dtype=int)

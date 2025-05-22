@@ -36,7 +36,8 @@ def parse_prediction_file(file):
     predicted = []
     for line in file:
         [text, lang] = line.split("\t")
-        predicted.append({"text": text.strip(), "languages": lang.strip().split(",")})
+        predicted.append(
+            {"text": text.strip(), "languages": lang.strip().split(",")})
     return predicted
 
 
@@ -64,7 +65,8 @@ def directory_accuracy(source_path, get_label: Callable[str, str] = lambda x: x,
 def main():
     parser = argparse.ArgumentParser(
         description="Language prediction using finetuned CANINE model")
-    parser.add_argument("--directory", type=str, default=None, help="Directory to test all of the files")
+    parser.add_argument("--directory", type=str, default=None,
+                        help="Directory to test all of the files")
     parser.add_argument("--input", type=argparse.FileType('r'), default=sys.stdin,
                         help="Path to the file of the model output")
     parser.add_argument("--most-common", type=int, default=5,
@@ -74,12 +76,14 @@ def main():
     args = parser.parse_args()
 
     if args.directory:
-        directory_accuracy(args.directory, get_label=lambda name: name.split("-")[-1][:3], glob="*.txt")
+        directory_accuracy(args.directory, get_label=lambda name: name.split(
+            "-")[-1][:3], glob="*.txt")
         return
 
     predicted = parse_prediction_file(args.input)
 
-    counter = Counter((lang for item in predicted for lang in item["languages"]))
+    counter = Counter(
+        (lang for item in predicted for lang in item["languages"]))
     print("=== Language counts ===")
     for lang, count in counter.most_common(args.most_common):
         print(f"{lang}: {count}")

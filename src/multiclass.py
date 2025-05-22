@@ -19,17 +19,15 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 from common import (
-    OpenLIDDataset,
-    OnTheFlyTokenizationCollator,
     sample_dataset,
     create_language_dict,
     save_object,
     load_object,
     PROJECT_PATH,
     tokenize_dataset,
-    EncodedOpenLIDDataset,
-    ConcatenateEncodingCollator
 )
+from LID_datasets import OpenLIDDataset, EncodedOpenLIDDataset
+from collators import OnTheFlyTokenizationCollator, ConcatenateEncodingCollator
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned"  # Default path to your finetuned model
@@ -38,6 +36,7 @@ SAMPLES_PER_LANGUAGE = 10_000
 
 EVAL_STEPS = 5_000
 LOG_STEPS = 100
+
 
 def load_dataset(samples_count: int | None, encoder_path: Path):
     dataset = datasets.load_dataset(

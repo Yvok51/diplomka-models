@@ -5,8 +5,10 @@ import datasets
 from matplotlib import pyplot as plt
 import tqdm
 
+
 def main():
     dataset_statistics()
+
 
 def dataset_statistics():
     dataset = datasets.load_dataset(
@@ -37,7 +39,8 @@ def dataset_statistics():
 
     print(f"maximum: {maximum}")
     for key, val in bigger_than.items():
-        print(f"Bigger than {key}: {val} ({(val * step) / len(dataset['train']) * 100} %)")
+        print(
+            f"Bigger than {key}: {val} ({(val * step) / len(dataset['train']) * 100} %)")
 
     if len(lengths) < 10_000_000:
         plt.hist(lengths, bins=[x for x in range(0, 2101, 100)])
