@@ -168,10 +168,10 @@ def predict(dataset, model, tokenizer, encoder, device):
 
 class CanineForMultiLabelClassificationConfig(PretrainedConfig):
     model_type = "CanineMultiLabelClassifier"
-    classes: list[str] = []
+    classes: list[str] = ()
     negative_sampling = False
 
-    def __init__(self, classes=[], negative_sampling=False, **kwargs):
+    def __init__(self, classes=(), negative_sampling=False, **kwargs):
         super().__init__(**kwargs)
         self.classes = classes
         self.negative_sampling = negative_sampling
@@ -212,7 +212,7 @@ class CanineForMultiLabelClassification(PreTrainedModel):
         return {"logits": logits}
 
 
-def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
+def prepare_multilabel_dataset(sample_count: int, encoder_path=None):
     """
     Prepare a multi-label dataset by:
     1. Loading original data
@@ -244,8 +244,8 @@ def prepare_multilabel_dataset(sample_count: int, dataset_path=None):
         texts_single, labels_single = texts_original, labels_original
 
     # Encode multi-labels
-    if os.path.exists(ENCODER_PATH):
-        mlb = load_object(ENCODER_PATH)
+    if os.path.exists(encoder_path):
+        mlb = load_object(encoder_path)
         assert isinstance(mlb, MultiLabelBinarizer)
         encoded_labels = mlb.transform(labels_single)
     else:
@@ -357,6 +357,7 @@ def finetune_model(
             "recall": recall_micro
         }
 
+    # pylint: disable=unused-variable
     progress_callback = WandbPredictionProgressCallback(
         model=model,
         label_encoder=label_encoder,

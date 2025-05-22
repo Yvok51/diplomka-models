@@ -176,7 +176,7 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    logging.info(f"Using device: {device}")
+    logging.info("Using device: %s", device)
 
     train_texts, eval_texts, train_labels, eval_labels, label_encoder = load_dataset(
         args.samples_per_language, Path(args.encoder_path))

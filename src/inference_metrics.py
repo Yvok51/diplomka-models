@@ -54,7 +54,7 @@ def file_accuracy(filename, gold_label):
         return accuracy(predicted, gold_label)
 
 
-def directory_accuracy(source_path, get_label: Callable[str, str] = lambda x: x, glob="*.txt"):
+def directory_accuracy(source_path, get_label: Callable[[str], str] = lambda x: x, glob="*.txt"):
     for path in Path(source_path).rglob(glob):
         acc, correct, total = file_accuracy(
             path, LABELS_MAP[get_label(path.stem)])
