@@ -13,9 +13,11 @@ echo "$PBS_JOBID is running on node `hostname -f` in a scratch directory $SCRATC
 
 module add python/python-3.10.4-intel-19.0.4-sc7snnf
 
-export HOME="${MYHOME}"
-export TMPDIR="${SCRATCHDIR}"
+export HOME=$MYHOME
+export TMPDIR=$SCRATCHDIR
 cd $DATADIR
+
+echo "HOME directory: ${HOME}"
 
 git pull
 
