@@ -23,5 +23,5 @@ git pull
 
 MODEL_PATH="multilabel_synthetic_${PORTION}_output"
 venv/bin/python3 src/multilabel.py --samples-per-language 20000 --model-path "${MODEL_PATH}" --synthetic-proportion "${PORTION}"
-python3 src/flores_evaluation.py --model-path "${MODEL_PATH}" --type multilabel --encoder-path trainer_output/multilabel_encoder.pkl --output "results/flores_synthetic_${PORTION}.txt"
+venv/bin/python3 src/flores_evaluation.py --model-path "${MODEL_PATH}" --type multilabel --encoder-path trainer_output/multilabel_encoder.pkl --output "results/flores_synthetic_${PORTION}.txt"
 
