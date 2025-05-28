@@ -49,7 +49,7 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         if idx < len(self.labels):
-            return {"text": self.texts[idx], "label": torch.tensor(self.labels[idx], dtype=torch.long).to(self.device)}
+            return {"text": self.texts[idx], "label": self.labels[idx]}
         else:
             num_samples = np.random.randint(2, 3)
             indices = np.random.randint(len(self.labels), size=num_samples)
