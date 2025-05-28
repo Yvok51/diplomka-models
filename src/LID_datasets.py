@@ -8,7 +8,7 @@ class OpenLIDDataset(torch.utils.data.Dataset):
     def __init__(self, texts, labels):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.texts = texts
-        self.labels = torch.tensor(labels, dtype=torch.long).to(self.device)
+        self.labels = torch.from_numpy(labels).to(self.device)
 
     def __getitem__(self, idx):
         return {"text": self.texts[idx], "label": self.labels[idx]}
@@ -42,7 +42,7 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
     def __init__(self, texts, labels, synthetic_proportion: float = 1):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.texts = texts
-        self.labels = torch.from_numpy(labels).to(self.device)
+        self.labels = torch.from_numpy(labels.astype(np.uint8)).to(self.device)
         self.synthetic_proportion = synthetic_proportion
         self.length = int(len(self.labels) +
                           self.synthetic_proportion * len(self.labels))

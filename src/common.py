@@ -36,7 +36,8 @@ def create_language_dict(texts: list[str], labels: list[str]):
 def load_dataset(
     samples_count: int | None,
     encoder_path: Path,
-    encode_labels: Callable[[list[str], str], tuple[torch.tensor, MultiLabelBinarizer | LabelEncoder]]
+    encode_labels: Callable[[list[str], str], tuple[torch.tensor, MultiLabelBinarizer | LabelEncoder]],
+    test_size: float = 0.05
 ):
     """Load OpenLID dataset"""
     dataset = datasets.load_dataset(
@@ -67,7 +68,7 @@ def load_dataset(
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
         texts,
         encoded_labels,
-        test_size=0.05,
+        test_size=test_size,
     )
 
     return train_texts, eval_texts, train_labels, eval_labels, encoder
