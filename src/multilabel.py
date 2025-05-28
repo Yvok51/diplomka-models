@@ -282,16 +282,16 @@ def finetune_model(
         }
 
     # pylint: disable=unused-variable
-    progress_callback = WandbPredictionProgressCallback(
-        model=model,
-        label_encoder=label_encoder,
-        tokenizer=tokenizer,
-        predict=predict,
-        val_dataset=eval_dataset,
-        device=device,
-        num_samples=10,
-        freq=1,
-    )
+    # progress_callback = WandbPredictionProgressCallback(
+    #     model=model,
+    #     label_encoder=label_encoder,
+    #     tokenizer=tokenizer,
+    #     predict=predict,
+    #     val_dataset=eval_dataset,
+    #     device=device,
+    #     num_samples=10,
+    #     freq=1,
+    # )
 
     trainer = Trainer(
         model=model,
