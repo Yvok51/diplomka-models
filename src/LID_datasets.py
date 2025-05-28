@@ -1,4 +1,5 @@
 import random
+import logging
 
 import torch
 import numpy as np
@@ -48,6 +49,7 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
                           self.synthetic_proportion * len(self.labels))
 
     def __getitem__(self, idx):
+        logging.debug("Accessing index: %s", idx)
         if idx < len(self.labels):
             return {"text": self.texts[idx], "label": self.labels[idx]}
         else:

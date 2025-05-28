@@ -334,11 +334,12 @@ def main():
                         default=1., help="The proportion of synthetic data to use")
     parser.add_argument("--negative-sampling", default=False, action="store_true",
                         help="Whether to use negative sampling based on the languages proximity")
+    parser.add_argument("--debug", default=False, action="store_true", help="Print debug information")
     args = parser.parse_args()
 
     load_dotenv()
 
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.INFO if not args.debug else logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
     set_seed(args.seed)
