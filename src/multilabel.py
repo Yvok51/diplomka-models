@@ -1,6 +1,5 @@
 import os
 import logging
-import random
 import argparse
 from pathlib import Path
 
@@ -17,16 +16,13 @@ from transformers import (
 import numpy as np
 import torch
 import torch.nn as nn
-import datasets
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MultiLabelBinarizer, minmax_scale
 from sklearn.metrics import f1_score, precision_score, recall_score
 import lang2vec.lang2vec as l2v
 
 from common import (
     PROJECT_PATH,
-    sample_dataset,
-    create_language_dict,
+    load_dataset,
     load_object,
     save_object,
     WandbPredictionProgressCallback,
@@ -212,90 +208,18 @@ class CanineForMultiLabelClassification(PreTrainedModel):
         return {"logits": logits}
 
 
-def prepare_multilabel_dataset(sample_count: int, encoder_path=None):
-    """
-    Prepare a multi-label dataset by:
-    1. Loading original data
-    2. Creating synthetic multi-language samples
-    3. Encoding with MultiLabelBinarizer
-    """
-    logging.info("Loading dataset...")
-
-    dataset = datasets.load_dataset(
-        'laurievb/OpenLID-v2', token=os.environ.get("HUGGINGFACE_TOKEN"),
-        features=datasets.Features({
-            'text': datasets.Value('string'),
-            'language': datasets.Value('string'),
-            'source': datasets.Value('string'),
-            '__index_level_0__': datasets.Value('int64')
-        })
-    )
-
-    df = dataset['train']
-    # df = df.select(range(10_000))
-
-    texts_original = df['text']
-    labels_original = df['language']
-
-    if sample_count:
-        texts_single, labels_single = sample_dataset(
-            create_language_dict(texts_original, labels_original), sample_count)
-    else:
-        texts_single, labels_single = texts_original, labels_original
-
-    # Encode multi-labels
+def encode_multilabel(labels: list[str], encoder_path: str):
+    """Encode the labels into a multilabel setup"""
     if os.path.exists(encoder_path):
         mlb = load_object(encoder_path)
         assert isinstance(mlb, MultiLabelBinarizer)
-        encoded_labels = mlb.transform(([label] for label in labels_single))
+        encoded_labels = mlb.transform(([label] for label in labels))
     else:
         mlb = MultiLabelBinarizer()
-        encoded_labels = mlb.fit_transform(([label] for label in labels_single))
+        encoded_labels = mlb.fit_transform(([label] for label in labels))
         save_object(mlb, ENCODER_PATH)
 
-    train_texts, eval_texts, train_labels, eval_labels = train_test_split(
-        texts_single,
-        encoded_labels,
-        test_size=0.05,
-    )
-
-    return train_texts, eval_texts, train_labels, eval_labels, mlb
-
-
-def create_synthetic_data(languages: dict[str, list[str]], sample_count: int):
-    texts_multi = []
-    labels_multi = []
-
-    # Sample languages that have enough samples
-    viable_languages = [lang for lang,
-                        texts in languages.items() if len(texts) >= SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF]
-
-    logging.info(
-        "Creating %s synthetic multi-language samples...", sample_count)
-
-    for _ in range(sample_count):
-        # Select random languages
-        num_langs = random.randint(2, 3)
-        selected_langs = random.sample(viable_languages, num_langs)
-
-        # Sample a text from each language
-        sample_texts = []
-        for lang in selected_langs:
-            text = random.choice(languages[lang])
-            # Take a random fragment (50-100% of original)
-            words = text.split()
-            if len(words) > 3:  # Only fragment if enough words
-                fragment_size = random.randint(
-                    max(1, len(words)//2), len(words))
-                start_idx = random.randint(0, len(words) - fragment_size)
-                words = words[start_idx:start_idx + fragment_size]
-            sample_texts.extend(words)
-
-        combined_text = ' '.join(sample_texts)
-        texts_multi.append(combined_text)
-        labels_multi.append(selected_langs)
-
-    return texts_multi, labels_multi
+    return encoded_labels, mlb
 
 
 def finetune_model(
@@ -423,8 +347,8 @@ def main():
 
     logging.info("Using device: %s", device)
 
-    train_texts, eval_texts, train_labels, eval_labels, mlb = prepare_multilabel_dataset(
-        args.samples_per_language, Path(args.encoder_path))
+    train_texts, eval_texts, train_labels, eval_labels, mlb = load_dataset(
+        args.samples_per_language, Path(args.encoder_path), encode_multilabel)
 
     model = CanineForMultiLabelClassification(
         CanineForMultiLabelClassificationConfig(

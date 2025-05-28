@@ -4,10 +4,15 @@ from pathlib import Path
 import pickle
 import os
 import logging
+from typing import Callable
 
 import pandas as pd
+import datasets
+import torch
 from transformers import CanineTokenizer
 from transformers.integrations import WandbCallback
+from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
+from sklearn.model_selection import train_test_split
 import tqdm
 
 from LID_datasets import OpenLIDDataset
@@ -26,6 +31,46 @@ def create_language_dict(texts: list[str], labels: list[str]):
             languages[label].append(texts[idx])
 
     return languages
+
+
+def load_dataset(
+    samples_count: int | None,
+    encoder_path: Path,
+    encode_labels: Callable[[list[str], str], tuple[torch.tensor, MultiLabelBinarizer | LabelEncoder]]
+):
+    """Load OpenLID dataset"""
+    dataset = datasets.load_dataset(
+        'laurievb/OpenLID-v2', token=os.environ.get("HUGGINGFACE_TOKEN"),
+        features=datasets.Features({  # Present because without it, the function throws an exception
+            'text': datasets.Value('string'),
+            'language': datasets.Value('string'),
+            'source': datasets.Value('string'),
+            '__index_level_0__': datasets.Value('int64')
+        })
+    )
+
+    df = dataset['train']
+    # df = df.select(range(10_000))
+
+    logging.info("Splitting labels and texts...")
+    if samples_count:
+        texts, labels = sample_dataset(create_language_dict(
+            df['text'], df['language']), samples_count)
+    else:
+        texts, labels = df['text'], df['language']
+
+    logging.info("Encoding the labels...")
+    # Encode language labels
+    encoded_labels, encoder = encode_labels(labels, encoder_path)
+
+    logging.info("Splitting dataset...")
+    train_texts, eval_texts, train_labels, eval_labels = train_test_split(
+        texts,
+        encoded_labels,
+        test_size=0.05,
+    )
+
+    return train_texts, eval_texts, train_labels, eval_labels, encoder
 
 
 def sample_dataset(languages: dict[str, list[str]], samples_per_language: int):

@@ -11,16 +11,13 @@ from transformers import (
     Trainer,
     set_seed,
 )
-import datasets
 import evaluate
 import numpy as np
 import torch
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 from common import (
-    sample_dataset,
-    create_language_dict,
+    load_dataset,
     save_object,
     load_object,
     PROJECT_PATH,
@@ -38,29 +35,7 @@ EVAL_STEPS = 5_000
 LOG_STEPS = 100
 
 
-def load_dataset(samples_count: int | None, encoder_path: Path):
-    dataset = datasets.load_dataset(
-        'laurievb/OpenLID-v2', token=os.environ.get("HUGGINGFACE_TOKEN"),
-        features=datasets.Features({  # Present because without it, the function throws an exception
-            'text': datasets.Value('string'),
-            'language': datasets.Value('string'),
-            'source': datasets.Value('string'),
-            '__index_level_0__': datasets.Value('int64')
-        })
-    )
-
-    df = dataset['train']
-    # df = df.select(range(10_000))
-
-    if samples_count:
-        logging.info("Randomly sampling dataset...")
-        texts, labels = sample_dataset(create_language_dict(
-            df['text'], df['language']), samples_count)
-    else:
-        texts, labels = df['text'], df['language']
-
-    logging.info("Encoding the labels...")
-    # Encode language labels
+def encode_multiclass(labels: list[str], encoder_path: str):
     if os.path.exists(encoder_path):
         label_encoder: LabelEncoder = load_object(encoder_path)
         assert isinstance(label_encoder, LabelEncoder)
@@ -70,15 +45,7 @@ def load_dataset(samples_count: int | None, encoder_path: Path):
         encoded_labels = label_encoder.fit_transform(labels)
         save_object(label_encoder, encoder_path)
 
-    logging.info("Splitting dataset...")
-    train_texts, eval_texts, train_labels, eval_labels = train_test_split(
-        texts,
-        encoded_labels,
-        test_size=0.05,
-    )
-
-    return train_texts, eval_texts, train_labels, eval_labels, label_encoder
-
+    return encoded_labels, label_encoder
 
 def finetune_model(
     model,
@@ -179,7 +146,7 @@ def main():
     logging.info("Using device: %s", device)
 
     train_texts, eval_texts, train_labels, eval_labels, label_encoder = load_dataset(
-        args.samples_per_language, Path(args.encoder_path))
+        args.samples_per_language, Path(args.encoder_path), encode_multiclass)
     num_labels = len(label_encoder.classes_)
 
     model = CanineForSequenceClassification.from_pretrained(
