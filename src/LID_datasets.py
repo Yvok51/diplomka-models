@@ -42,20 +42,25 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
     def __init__(self, texts, labels, synthetic_proportion: float = 1):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.texts = texts
-        self.labels = torch.tensor(labels, dtype=torch.long).to(self.device)
+        # torch.tensor(labels, dtype=torch.long).to(self.device)
+        self.labels = labels
         self.synthetic_proportion = synthetic_proportion
         self.length = int(len(self.labels) +
                           self.synthetic_proportion * len(self.labels))
 
     def __getitem__(self, idx):
         if idx < len(self.labels):
-            return {"text": self.texts[idx], "label": self.labels[idx]}
+            return {"text": self.texts[idx], "label": torch.tensor(self.labels[idx], dtype=torch.long).to(self.device)}
         else:
             num_samples = np.random.randint(2, 3)
             indices = np.random.randint(len(self.labels), size=num_samples)
 
-            label = torch.clamp(self.labels[indices].sum(
-                dim=0), 0, 1)  # logical and
+            label = []
+            for i in indices:
+                label.append(self.labels[i])
+            label = torch.clamp(torch.tensor(label, dtype=torch.long).to(
+                self.device).sum(dim=0), 0, 1)  # logical and
+            # label = torch.clamp(self.labels[indices].sum(dim=0), 0, 1)  # logical and
 
             final_text = []
             for i in indices:
