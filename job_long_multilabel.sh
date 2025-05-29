@@ -5,7 +5,7 @@
 
 # define a DATADIR variable: directory where the input files are taken from and where the output will be copied to
 MYHOME=/storage/brno2/home/michal-tichy
-DATADIR="${HOME}/diplomka/diplomka-models" # substitute username and path to your real username and path
+DATADIR="${MYHOME}/diplomka/diplomka-models" # substitute username and path to your real username and path
 
 # append a line to a file "jobs_info.txt" containing the ID of the job, the hostname of the node it is run on, and the path to a scratch directory
 # this information helps to find a scratch directory in case the job fails, and you need to remove the scratch directory manually
