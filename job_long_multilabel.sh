@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N multilabel_langID
 #PBS -l select=1:ncpus=4:ngpus=1:mem=512gb:scratch_local=10gb:gpu_mem=17gb
-#PBS -l walltime=400:00:00
+#PBS -l walltime=300:00:00
 
 # define a DATADIR variable: directory where the input files are taken from and where the output will be copied to
 MYHOME=/storage/brno2/home/michal-tichy
