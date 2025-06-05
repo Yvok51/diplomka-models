@@ -52,6 +52,7 @@ def load_dataset(
 
     df = dataset['train']
     # df = df.select(range(10_000))
+    df = df.filter(lambda d: isinstance(d['text'], str))
 
     logging.info("Splitting labels and texts...")
     if samples_count:
@@ -89,11 +90,11 @@ def sample_dataset(languages: dict[str, list[str]], samples_per_language: int):
     return new_texts, new_labels
 
 
-def tokenize_input(texts: list[str], tokenizer: CanineTokenizer, max_length=2048):
+def tokenize_input(texts: list[str], tokenizer: CanineTokenizer, max_length=512):
     return tokenizer(texts, padding=True, truncation=True, max_length=max_length, return_tensors='pt')
 
 
-def tokenize_dataset(texts, tokenizer: CanineTokenizer, max_length=2048):
+def tokenize_dataset(texts, tokenizer: CanineTokenizer, max_length=512):
     if os.path.exists(get_tokenized_inputs_path(max_length)):
         tokenized = load_object(get_tokenized_inputs_path(max_length))
     else:
