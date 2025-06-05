@@ -26,6 +26,7 @@ from common import (
     load_object,
     save_object,
     flores_to_iso,
+    compute_eval_steps,
 )
 from prediction import predict_multilabel
 from LID_datasets import SyntheticOpenLIDDataset
@@ -37,7 +38,8 @@ MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
 SAMPLES_PER_LANGUAGE = 10_000
 SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 
-EVAL_STEPS = 5_000
+EVAL_PHASES = 10
+EVAL_STEPS = 200_000
 LOG_STEPS = 100
 
 
@@ -238,12 +240,13 @@ def finetune_model(
     collator = OnTheFlyTokenizationCollator(
         tokenizer=tokenizer, max_length=max_length)
 
+    eval_steps = compute_eval_steps(train_dataset, batch_size, num_train_epochs, EVAL_PHASES)
     training_args = TrainingArguments(
         output_dir=output_dir,
         eval_strategy="steps",
-        eval_steps=EVAL_STEPS,
+        eval_steps=eval_steps,
         save_strategy="steps",
-        save_steps=EVAL_STEPS,
+        save_steps=eval_steps,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         learning_rate=learning_rate,

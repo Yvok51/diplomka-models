@@ -5,6 +5,7 @@ import pickle
 import os
 import logging
 from typing import Callable
+import math
 
 import pandas as pd
 import datasets
@@ -115,6 +116,10 @@ def load_object(path: Path):
     with open(path, 'rb') as f:
         return pickle.load(f)
 
+
+def compute_eval_steps(dataset: torch.utils.data.Dataset, batch_size, epochs, evals):
+    steps = math.ceil(len(dataset) / batch_size) * epochs
+    return math.floor(steps / evals)
 
 class WandbPredictionProgressCallback(WandbCallback):
     """Custom WandbCallback to log model predictions during training.
