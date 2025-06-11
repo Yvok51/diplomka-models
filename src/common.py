@@ -52,7 +52,9 @@ def load_dataset(
     )
 
     df = dataset['train']
-    # df = df.select(range(10_000))
+    del dataset
+
+    # df = df.select(range(3_000_000))
     df = df.filter(lambda d: isinstance(d['text'], str))
 
     logging.info("Splitting labels and texts...")
@@ -61,16 +63,19 @@ def load_dataset(
             df['text'], df['language']), samples_count)
     else:
         texts, labels = df['text'], df['language']
+    del df
 
     logging.info("Encoding the labels...")
     # Encode language labels
     encoded_labels, encoder = encode_labels(labels, encoder_path)
+    del labels
 
     logging.info("Splitting dataset...")
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
         texts,
         encoded_labels,
         test_size=test_size,
+        shuffle=False # Lower memory usage
     )
 
     return train_texts, eval_texts, train_labels, eval_labels, encoder

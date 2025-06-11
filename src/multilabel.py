@@ -2,6 +2,7 @@ import os
 import logging
 import argparse
 from pathlib import Path
+import tracemalloc
 
 from dotenv import load_dotenv
 from transformers import (
@@ -31,6 +32,7 @@ from common import (
 from prediction import predict_multilabel
 from LID_datasets import SyntheticOpenLIDDataset
 from collators import OnTheFlyTokenizationCollator
+from memory_profile import display_top
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
@@ -347,6 +349,8 @@ def main():
 
     set_seed(args.seed)
 
+    # tracemalloc.start()
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     logging.info("Using device: %s", device)
@@ -366,6 +370,8 @@ def main():
         train_texts, train_labels, args.synthetic_proportion)
     eval_dataset = SyntheticOpenLIDDataset(
         eval_texts, eval_labels, args.synthetic_proportion)
+
+    # display_top(tracemalloc.take_snapshot(), limit=10)
 
     logging.info("Finetuning...")
     finetune_model(
