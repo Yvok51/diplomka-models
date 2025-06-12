@@ -4,19 +4,13 @@ from pathlib import Path
 import pickle
 import os
 import logging
-from typing import Callable
 import math
 
-import pandas as pd
 import datasets
 import torch
 from transformers import CanineTokenizer
-from transformers.integrations import WandbCallback
-from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 from sklearn.model_selection import train_test_split
 import tqdm
-
-from LID_datasets import OpenLIDDataset
 
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
 DATA_PATH = PROJECT_PATH / "trainer_output"
@@ -52,6 +46,7 @@ def get_data():
         df = dataset["train"]
         del dataset
 
+        # df = df.select(range(1_000_000))
         df = df.filter(lambda d: isinstance(d['text'], str))
 
         logging.info("Splitting labels and texts...")
@@ -68,8 +63,6 @@ def get_data():
 
 def load_dataset(
     samples_count: int | None,
-    encoder_path: Path,
-    encode_labels: Callable[[list[str], str], tuple[torch.tensor, MultiLabelBinarizer | LabelEncoder]],
     test_size: float = 0.05
 ):
     """Load OpenLID dataset"""
@@ -78,20 +71,14 @@ def load_dataset(
         texts, labels = sample_dataset(
             create_language_dict(texts, labels), samples_count)
 
-    logging.info("Encoding the labels...")
-    # Encode language labels
-    encoded_labels, encoder = encode_labels(labels, encoder_path)
-    del labels
-
     logging.info("Splitting dataset...")
     train_texts, eval_texts, train_labels, eval_labels = train_test_split(
         texts,
-        encoded_labels,
+        labels,
         test_size=test_size,
-        shuffle=False  # Lower memory usage
     )
 
-    return train_texts, eval_texts, train_labels, eval_labels, encoder
+    return train_texts, eval_texts, train_labels, eval_labels
 
 
 def sample_dataset(languages: dict[str, list[str]], samples_per_language: int):
@@ -138,62 +125,6 @@ def load_object(path: Path):
 def compute_eval_steps(dataset: torch.utils.data.Dataset, batch_size, epochs, evals):
     steps = math.ceil(len(dataset) / batch_size) * epochs
     return math.floor(steps / evals)
-
-
-class WandbPredictionProgressCallback(WandbCallback):
-    """Custom WandbCallback to log model predictions during training.
-
-    This callback logs model predictions and labels to a wandb.Table at each
-    logging step during training. It allows to visualize the
-    model predictions as the training progresses.
-
-    Attributes:
-        trainer (Trainer): The Hugging Face Trainer instance.
-        tokenizer (AutoTokenizer): The tokenizer associated with the model.
-        sample_dataset (Dataset): A subset of the validation dataset
-          for generating predictions.
-        num_samples (int, optional): Number of samples to select from
-          the validation dataset for generating predictions. Defaults to 100.
-        freq (int, optional): Frequency of logging. Defaults to 2.
-    """
-
-    def __init__(self, model, tokenizer, label_encoder, predict, val_dataset: OpenLIDDataset, device, num_samples=100, freq=2):
-        """Initializes the WandbPredictionProgressCallback instance.
-
-        Args:
-            trainer (Trainer): The Hugging Face Trainer instance.
-            tokenizer (AutoTokenizer): The tokenizer associated
-              with the model.
-            val_dataset (Dataset): The validation dataset.
-            num_samples (int, optional): Number of samples to select from
-              the validation dataset for generating predictions.
-              Defaults to 100.
-            freq (int, optional): Frequency of logging. Defaults to 2.
-        """
-        super().__init__()
-        self.model = model
-        self.tokenizer = tokenizer
-        self.label_encoder = label_encoder
-        self.sample_dataset = val_dataset.random_subset(num_samples)
-        self.predict = predict
-        self.device = device
-        self.freq = freq
-
-    def on_evaluate(self, args, state, control, **kwargs):
-        super().on_evaluate(args, state, control, **kwargs)
-        # control the frequency of logging by logging the predictions
-        # every `freq` epochs
-        if state.epoch % self.freq == 0:
-            # generate predictions
-            predictions = self.predict(
-                self.sample_dataset, self.model, self.tokenizer, self.label_encoder, self.device)
-
-            # add predictions to a wandb.Table
-            predictions_df = pd.DataFrame(predictions)
-            predictions_df["epoch"] = state.epoch
-            records_table = self._wandb.Table(dataframe=predictions_df)
-            # log the table to wandb
-            self._wandb.log({"sample_predictions": records_table})
 
 
 def flores_to_iso(flores_label: str):

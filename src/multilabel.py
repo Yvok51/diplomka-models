@@ -1,8 +1,6 @@
 import os
 import logging
 import argparse
-from pathlib import Path
-import tracemalloc
 
 from dotenv import load_dotenv
 from transformers import (
@@ -32,7 +30,6 @@ from common import (
 from prediction import predict_multilabel
 from LID_datasets import SyntheticOpenLIDDataset
 from collators import OnTheFlyTokenizationCollator
-from memory_profile import display_top
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
@@ -230,8 +227,6 @@ def finetune_model(
     tokenizer,
     train_dataset,
     eval_dataset,
-    label_encoder,
-    device,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=16,
@@ -242,7 +237,8 @@ def finetune_model(
     collator = OnTheFlyTokenizationCollator(
         tokenizer=tokenizer, max_length=max_length)
 
-    eval_steps = compute_eval_steps(train_dataset, batch_size, num_train_epochs, EVAL_PHASES)
+    eval_steps = compute_eval_steps(
+        train_dataset, batch_size, num_train_epochs, EVAL_PHASES)
     training_args = TrainingArguments(
         output_dir=output_dir,
         eval_strategy="steps",
@@ -284,18 +280,6 @@ def finetune_model(
             "precision": precision_micro,
             "recall": recall_micro
         }
-
-    # pylint: disable=unused-variable
-    # progress_callback = WandbPredictionProgressCallback(
-    #     model=model,
-    #     label_encoder=label_encoder,
-    #     tokenizer=tokenizer,
-    #     predict=predict,
-    #     val_dataset=eval_dataset,
-    #     device=device,
-    #     num_samples=10,
-    #     freq=1,
-    # )
 
     trainer = Trainer(
         model=model,
@@ -355,8 +339,9 @@ def main():
 
     logging.info("Using device: %s", device)
 
-    train_texts, eval_texts, train_labels, eval_labels, mlb = load_dataset(
-        args.samples_per_language, Path(args.encoder_path), encode_multilabel)
+    train_texts, eval_texts, train_labels, eval_labels = load_dataset(
+        args.samples_per_language)
+    mlb = load_object(args.encoder_path)
 
     model = CanineForMultiLabelClassification(
         CanineForMultiLabelClassificationConfig(
@@ -367,9 +352,9 @@ def main():
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
     train_dataset = SyntheticOpenLIDDataset(
-        train_texts, train_labels, args.synthetic_proportion)
+        train_texts, train_labels, mlb, args.synthetic_proportion)
     eval_dataset = SyntheticOpenLIDDataset(
-        eval_texts, eval_labels, args.synthetic_proportion)
+        eval_texts, eval_labels, mlb, args.synthetic_proportion)
 
     # display_top(tracemalloc.take_snapshot(), limit=10)
 
@@ -379,8 +364,6 @@ def main():
         tokenizer,
         train_dataset,
         eval_dataset,
-        device=device,
-        label_encoder=mlb,
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,

@@ -1,6 +1,5 @@
 import os
 import logging
-from pathlib import Path
 import argparse
 
 from dotenv import load_dotenv
@@ -21,11 +20,10 @@ from common import (
     save_object,
     load_object,
     PROJECT_PATH,
-    tokenize_dataset,
     compute_eval_steps,
 )
-from LID_datasets import OpenLIDDataset, EncodedOpenLIDDataset
-from collators import OnTheFlyTokenizationCollator, ConcatenateEncodingCollator
+from LID_datasets import OpenLIDDataset
+from collators import OnTheFlyTokenizationCollator
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned"  # Default path to your finetuned model
@@ -49,12 +47,12 @@ def encode_multiclass(labels: list[str], encoder_path: str):
 
     return encoded_labels, label_encoder
 
+
 def finetune_model(
     model,
     tokenizer,
     train_dataset,
     eval_dataset,
-    pre_tokenize,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=24,
@@ -62,13 +60,11 @@ def finetune_model(
     weight_decay=0.01,
     max_length=2048
 ):
-    if pre_tokenize:
-        collator = ConcatenateEncodingCollator(max_length)
-    else:
-        collator = OnTheFlyTokenizationCollator(
-            tokenizer=tokenizer, max_length=max_length)
+    collator = OnTheFlyTokenizationCollator(
+        tokenizer=tokenizer, max_length=max_length)
 
-    eval_steps = compute_eval_steps(train_dataset, batch_size, num_train_epochs, EVAL_PHASES)
+    eval_steps = compute_eval_steps(
+        train_dataset, batch_size, num_train_epochs, EVAL_PHASES)
     training_args = TrainingArguments(
         output_dir=output_dir,
         eval_strategy="steps",
@@ -133,8 +129,6 @@ def main():
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
-    parser.add_argument("--pre-tokenize", action="store_true", default=False,
-                        help="We should pre tokenize the entire dataset, by default the tokenization is on the fly")
     args = parser.parse_args()
 
     load_dotenv()
@@ -148,25 +142,17 @@ def main():
 
     logging.info("Using device: %s", device)
 
-    train_texts, eval_texts, train_labels, eval_labels, label_encoder = load_dataset(
-        args.samples_per_language, Path(args.encoder_path), encode_multiclass)
+    train_texts, eval_texts, train_labels, eval_labels, = load_dataset(
+        args.samples_per_language)
+    label_encoder = load_object(args.encoder_path)
     num_labels = len(label_encoder.classes_)
 
     model = CanineForSequenceClassification.from_pretrained(
         "google/canine-c", num_labels=num_labels).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
-    if args.pre_tokenize:
-        logging.info("Tokenizing dataset...")
-        train_tokens = tokenize_dataset(
-            train_texts, tokenizer, args.max_length)
-        eval_tokens = tokenize_dataset(eval_texts, tokenizer, args.max_length)
-
-        train_dataset = EncodedOpenLIDDataset(train_tokens, train_labels)
-        eval_dataset = EncodedOpenLIDDataset(eval_tokens, eval_labels)
-    else:
-        train_dataset = OpenLIDDataset(train_texts, train_labels)
-        eval_dataset = OpenLIDDataset(eval_texts, eval_labels)
+    train_dataset = OpenLIDDataset(train_texts, train_labels, label_encoder)
+    eval_dataset = OpenLIDDataset(eval_texts, eval_labels, label_encoder)
 
     logging.info("Finetuning...")
     finetune_model(
@@ -174,7 +160,6 @@ def main():
         tokenizer,
         train_dataset,
         eval_dataset,
-        pre_tokenize=args.pre_tokenize,
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,
