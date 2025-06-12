@@ -19,6 +19,7 @@ import tqdm
 from LID_datasets import OpenLIDDataset
 
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
+DATA_PATH = PROJECT_PATH / "trainer_output"
 
 
 def get_tokenized_inputs_path(max_length):
@@ -34,6 +35,37 @@ def create_language_dict(texts: list[str], labels: list[str]):
     return languages
 
 
+def get_data():
+    text_path = DATA_PATH / "text.pkl"
+    label_path = DATA_PATH / "label.pkl"
+
+    if not os.path.exists(text_path) or not os.path.exists(label_path):
+        dataset = datasets.load_dataset(
+            'laurievb/OpenLID-v2', token=os.environ.get("HUGGINGFACE_TOKEN"),
+            features=datasets.Features({  # Present because without it, the function throws an exception
+                'text': datasets.Value('string'),
+                'language': datasets.Value('string'),
+                'source': datasets.Value('string'),
+                '__index_level_0__': datasets.Value('int64')
+            })
+        )
+        df = dataset["train"]
+        del dataset
+
+        df = df.filter(lambda d: isinstance(d['text'], str))
+
+        logging.info("Splitting labels and texts...")
+        texts, labels = df['text'], df['language']
+        save_object(texts, text_path)
+        save_object(labels, label_path)
+
+        return texts, labels
+
+    else:
+        logging.info("Loading data...")
+        return load_object(text_path), load_object(label_path)
+
+
 def load_dataset(
     samples_count: int | None,
     encoder_path: Path,
@@ -41,29 +73,10 @@ def load_dataset(
     test_size: float = 0.05
 ):
     """Load OpenLID dataset"""
-    dataset = datasets.load_dataset(
-        'laurievb/OpenLID-v2', token=os.environ.get("HUGGINGFACE_TOKEN"),
-        features=datasets.Features({  # Present because without it, the function throws an exception
-            'text': datasets.Value('string'),
-            'language': datasets.Value('string'),
-            'source': datasets.Value('string'),
-            '__index_level_0__': datasets.Value('int64')
-        })
-    )
-
-    df = dataset['train']
-    del dataset
-
-    # df = df.select(range(3_000_000))
-    df = df.filter(lambda d: isinstance(d['text'], str))
-
-    logging.info("Splitting labels and texts...")
+    texts, labels = get_data()
     if samples_count:
-        texts, labels = sample_dataset(create_language_dict(
-            df['text'], df['language']), samples_count)
-    else:
-        texts, labels = df['text'], df['language']
-    del df
+        texts, labels = sample_dataset(
+            create_language_dict(texts, labels), samples_count)
 
     logging.info("Encoding the labels...")
     # Encode language labels
@@ -75,7 +88,7 @@ def load_dataset(
         texts,
         encoded_labels,
         test_size=test_size,
-        shuffle=False # Lower memory usage
+        shuffle=False  # Lower memory usage
     )
 
     return train_texts, eval_texts, train_labels, eval_labels, encoder
@@ -125,6 +138,7 @@ def load_object(path: Path):
 def compute_eval_steps(dataset: torch.utils.data.Dataset, batch_size, epochs, evals):
     steps = math.ceil(len(dataset) / batch_size) * epochs
     return math.floor(steps / evals)
+
 
 class WandbPredictionProgressCallback(WandbCallback):
     """Custom WandbCallback to log model predictions during training.
