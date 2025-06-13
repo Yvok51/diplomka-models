@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J multiclass_langID
 #SBATCH -p gpu
-#SBATCH -c 1
+#SBATCH -c 4
 #SBATCH --mem 64G
 #SBATCH -G 1
 #SBATCH -o job_long_multiclass.out
