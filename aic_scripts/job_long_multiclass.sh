@@ -8,4 +8,5 @@
 #SBATCH -e job_long_multiclass.err
 
 venv/bin/python3 src/multiclass.py --epochs 1 --batch-size 128 --model-path long_multiclass_output
+mkdir results
 venv/bin/python3 src/flores_evaluation.py --model-path long_multiclass_output --type multiclass --encoder-path trainer_output/label_encoder.pkl --output "results/flores_multiclass_long.txt"
