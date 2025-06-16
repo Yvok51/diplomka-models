@@ -84,6 +84,7 @@ def finetune_model(
         remove_unused_columns=False,
         dataloader_pin_memory=False,
         report_to="wandb",
+        resume_from_checkpoint=True,
     )
 
     metric = evaluate.load("accuracy")
