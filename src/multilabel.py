@@ -293,7 +293,7 @@ def finetune_model(
 
     # trainer.add_callback(progress_callback)
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=True)
 
     logging.info("Saving the model...")
 

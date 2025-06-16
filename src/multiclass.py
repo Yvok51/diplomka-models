@@ -104,7 +104,7 @@ def finetune_model(
         compute_metrics=compute_metrics
     )
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=True)
 
     logging.info("Saving the model...")
 
