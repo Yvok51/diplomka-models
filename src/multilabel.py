@@ -26,6 +26,7 @@ from common import (
     save_object,
     flores_to_iso,
     compute_eval_steps,
+    get_checkpoint
 )
 from prediction import predict_multilabel
 from LID_datasets import SyntheticOpenLIDDataset
@@ -228,6 +229,7 @@ def finetune_model(
     train_dataset,
     eval_dataset,
     device,
+    resume_from_checkpoint,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=16,
@@ -260,8 +262,7 @@ def finetune_model(
         remove_unused_columns=False,
         dataloader_pin_memory=False,
         report_to="wandb",
-        resume_from_checkpoint=True
-    )
+   )
 
     def compute_metrics(eval_pred):
         logits, labels = eval_pred
@@ -294,13 +295,36 @@ def finetune_model(
 
     # trainer.add_callback(progress_callback)
 
-    trainer.train(resume_from_checkpoint=True)
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint )
 
     logging.info("Saving the model...")
 
     trainer.save_model(output_dir)
 
     return model
+
+def load_model_from_checkpoint(checkpoint_path, config):
+    """
+    Load model from a specific checkpoint.
+
+    Args:
+        checkpoint_path: Path to the checkpoint directory
+        config: Model configuration
+
+    Returns:
+        Loaded model or None if loading failed
+    """
+    try:
+        logging.info("Loading model from checkpoint: %s", checkpoint_path)
+        model = CanineForMultiLabelClassification.from_pretrained(
+            checkpoint_path,
+            config=config
+        )
+        return model
+    except Exception as e:
+        logging.error("Failed to load model from checkpoint %s: %s", checkpoint_path, e)
+        return None
+
 
 
 def main():
@@ -326,6 +350,10 @@ def main():
                         help="Whether to use negative sampling based on the languages proximity")
     parser.add_argument("--debug", default=False,
                         action="store_true", help="Print debug information")
+    parser.add_argument("--no-resume", default=False, action="store_true",
+                        help="Don't attempt to resume from checkpoint, start training from scratch")
+    parser.add_argument("--checkpoint-path", type=str, default=None,
+                        help="Specific checkpoint path to resume from (overrides automatic detection)")
     args = parser.parse_args()
 
     load_dotenv()
@@ -345,12 +373,23 @@ def main():
         args.samples_per_language, test_size=0.001)
     mlb = load_object(args.encoder_path)
 
-    model = CanineForMultiLabelClassification(
-        CanineForMultiLabelClassificationConfig(
-            classes=mlb.classes_.tolist(),
-            negative_sampling=args.negative_sampling
-        )
-    ).to(device)
+    config = CanineForMultiLabelClassificationConfig(
+        classes=mlb.classes_.tolist(),
+        negative_sampling=args.negative_sampling
+    )
+
+    checkpoint_path = get_checkpoint(args.no_resume, args.checkpoint_path, args.model_path)
+
+    if checkpoint_path is None:
+        logging.info("Initializing new model...")
+        model = CanineForMultiLabelClassification(config)
+    else:
+
+        model = load_model_from_checkpoint(checkpoint_path, config)
+
+    if model is None:
+        raise RuntimeError("Unable to load model. Shutting down.")
+    model.to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
     train_dataset = SyntheticOpenLIDDataset(
@@ -367,6 +406,7 @@ def main():
         train_dataset,
         eval_dataset,
         device=device,
+        resume_from_checkpoint=checkpoint_path,
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,

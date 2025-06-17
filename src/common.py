@@ -5,6 +5,7 @@ import pickle
 import os
 import logging
 import math
+import glob
 
 import datasets
 import torch
@@ -129,3 +130,66 @@ def compute_eval_steps(dataset: torch.utils.data.Dataset, batch_size, epochs, ev
 
 def flores_to_iso(flores_label: str):
     return str(flores_label[:3])
+
+
+def find_latest_checkpoint(checkpoint_dir):
+    """
+    Find the latest checkpoint in the given directory.
+
+    Args:
+        checkpoint_dir: Directory to search for checkpoints
+
+    Returns:
+        Path to the latest checkpoint or None if no checkpoints found
+    """
+    if not os.path.exists(checkpoint_dir):
+        return None
+
+    checkpoint_pattern = os.path.join(checkpoint_dir, "checkpoint-*")
+    checkpoints = glob.glob(checkpoint_pattern)
+
+    if not checkpoints:
+        return None
+
+    # Extract step numbers and find the latest one
+    def get_step_number(checkpoint_path):
+        try:
+            return int(os.path.basename(checkpoint_path).split('-')[1])
+        except (IndexError, ValueError):
+            return 0
+
+    latest_checkpoint = max(checkpoints, key=get_step_number)
+
+    # Verify the checkpoint is valid (contains required files)
+    required_files = ['config.json', 'pytorch_model.bin', 'trainer_state.json']
+    if all(os.path.exists(os.path.join(latest_checkpoint, f)) for f in required_files):
+        return latest_checkpoint
+    else:
+        logging.warning("Checkpoint %s appears to be incomplete, ignoring", latest_checkpoint)
+        return None
+
+def get_checkpoint(no_resume: bool, checkpoint_path: str | None, model_path: str):
+    """
+    Get the checkpoint from which we start training
+
+    Args:
+        no_resume: Start from scratch
+        checpoint_path: Specific checkpoint to start from
+        model_path: The final path to save the model to
+
+    Returns:
+        The path to the checkpoint to start training from or None if we are to start from scratch
+    """
+    if no_resume:
+        return None
+
+    if checkpoint_path:
+        if os.path.exists(checkpoint_path):
+            return checkpoint_path
+        else:
+            logging.warning("Specified checkpoint path does not exist: %s", checkpoint_path)
+            return None
+
+    return find_latest_checkpoint(model_path)
+
+
