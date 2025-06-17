@@ -262,7 +262,7 @@ def finetune_model(
         remove_unused_columns=False,
         dataloader_pin_memory=False,
         report_to="wandb",
-   )
+    )
 
     def compute_metrics(eval_pred):
         logits, labels = eval_pred
@@ -295,13 +295,14 @@ def finetune_model(
 
     # trainer.add_callback(progress_callback)
 
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint )
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     logging.info("Saving the model...")
 
     trainer.save_model(output_dir)
 
     return model
+
 
 def load_model_from_checkpoint(checkpoint_path, config):
     """
@@ -322,9 +323,9 @@ def load_model_from_checkpoint(checkpoint_path, config):
         )
         return model
     except Exception as e:
-        logging.error("Failed to load model from checkpoint %s: %s", checkpoint_path, e)
+        logging.error(
+            "Failed to load model from checkpoint %s: %s", checkpoint_path, e)
         return None
-
 
 
 def main():
@@ -378,7 +379,8 @@ def main():
         negative_sampling=args.negative_sampling
     )
 
-    checkpoint_path = get_checkpoint(args.no_resume, args.checkpoint_path, args.model_path)
+    checkpoint_path = get_checkpoint(
+        args.no_resume, args.checkpoint_path, args.model_path)
 
     if checkpoint_path is None:
         logging.info("Initializing new model...")

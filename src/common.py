@@ -159,14 +159,8 @@ def find_latest_checkpoint(checkpoint_dir):
             return 0
 
     latest_checkpoint = max(checkpoints, key=get_step_number)
+    return latest_checkpoint
 
-    # Verify the checkpoint is valid (contains required files)
-    required_files = ['config.json', 'pytorch_model.bin', 'trainer_state.json']
-    if all(os.path.exists(os.path.join(latest_checkpoint, f)) for f in required_files):
-        return latest_checkpoint
-    else:
-        logging.warning("Checkpoint %s appears to be incomplete, ignoring", latest_checkpoint)
-        return None
 
 def get_checkpoint(no_resume: bool, checkpoint_path: str | None, model_path: str):
     """
@@ -187,9 +181,8 @@ def get_checkpoint(no_resume: bool, checkpoint_path: str | None, model_path: str
         if os.path.exists(checkpoint_path):
             return checkpoint_path
         else:
-            logging.warning("Specified checkpoint path does not exist: %s", checkpoint_path)
+            logging.warning(
+                "Specified checkpoint path does not exist: %s", checkpoint_path)
             return None
 
     return find_latest_checkpoint(model_path)
-
-
