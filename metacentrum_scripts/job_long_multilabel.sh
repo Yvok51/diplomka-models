@@ -21,6 +21,6 @@ git pull
 venv/bin/pip install -r requirements.txt
 venv/bin/pip install -r requirements-pytorch.txt
 
-venv/bin/python3 src/multilabel.py --epochs 1 --batch-size 128 --model-path long_multilabel_output --synthetic-proportion 0.5
+venv/bin/python3 src/multilabel.py --epochs 1 --batch-size 64 --model-path long_multilabel_output --synthetic-proportion 0.5
 mkdir results
 venv/bin/python3 src/flores_evaluation.py --model-path long_multilabel_output --type multilabel --encoder-path trainer_output/multilabel_encoder.pkl --output "results/flores_multilabel_long.txt"
