@@ -37,7 +37,7 @@ MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
 SAMPLES_PER_LANGUAGE = 10_000
 SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 
-EVAL_PHASES = 10
+EVAL_PHASES = 200
 EVAL_STEPS = 200_000
 LOG_STEPS = 100
 
@@ -227,6 +227,7 @@ def finetune_model(
     tokenizer,
     train_dataset,
     eval_dataset,
+    device,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=16,
@@ -235,7 +236,7 @@ def finetune_model(
     max_length=2048
 ):
     collator = OnTheFlyTokenizationCollator(
-        tokenizer=tokenizer, max_length=max_length)
+        tokenizer=tokenizer, max_length=max_length, device=device)
 
     eval_steps = compute_eval_steps(
         train_dataset, batch_size, num_train_epochs, EVAL_PHASES)
@@ -315,7 +316,7 @@ def main():
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=128,
+    parser.add_argument("--batch-size", type=int, default=64,
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
@@ -341,7 +342,7 @@ def main():
     logging.info("Using device: %s", device)
 
     train_texts, eval_texts, train_labels, eval_labels = load_dataset(
-        args.samples_per_language)
+        args.samples_per_language, test_size=0.001)
     mlb = load_object(args.encoder_path)
 
     model = CanineForMultiLabelClassification(
@@ -365,6 +366,7 @@ def main():
         tokenizer,
         train_dataset,
         eval_dataset,
+        device=device,
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,

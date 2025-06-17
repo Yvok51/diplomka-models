@@ -53,15 +53,16 @@ def finetune_model(
     tokenizer,
     train_dataset,
     eval_dataset,
+    device,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=24,
     num_train_epochs=1,
     weight_decay=0.01,
-    max_length=2048
+    max_length=2048,
 ):
     collator = OnTheFlyTokenizationCollator(
-        tokenizer=tokenizer, max_length=max_length)
+        tokenizer=tokenizer, max_length=max_length, device=device)
 
     eval_steps = compute_eval_steps(
         train_dataset, batch_size, num_train_epochs, EVAL_PHASES)
@@ -161,6 +162,7 @@ def main():
         tokenizer,
         train_dataset,
         eval_dataset,
+        device=device,
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,

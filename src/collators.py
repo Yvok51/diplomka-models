@@ -4,16 +4,18 @@ from common import tokenize_input
 
 
 class OnTheFlyTokenizationCollator:
-    def __init__(self, tokenizer, max_length=2048):
+    def __init__(self, tokenizer, max_length=2048, device="cpu"):
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.device = device
+
 
     def __call__(self, features):
         texts = [feature["text"] for feature in features]
         labels = [feature["label"] for feature in features]
 
         batch_encodings = tokenize_input(
-            texts, self.tokenizer, self.max_length)
+            texts, self.tokenizer, self.max_length).to(self.device)
 
         batch_encodings["labels"] = torch.stack(labels, dim=0)
 
