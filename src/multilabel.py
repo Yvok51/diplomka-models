@@ -386,7 +386,6 @@ def main():
         logging.info("Initializing new model...")
         model = CanineForMultiLabelClassification(config)
     else:
-
         model = load_model_from_checkpoint(checkpoint_path, config)
 
     if model is None:

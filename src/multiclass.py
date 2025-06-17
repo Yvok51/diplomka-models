@@ -21,6 +21,7 @@ from common import (
     load_object,
     PROJECT_PATH,
     compute_eval_steps,
+    get_checkpoint,
 )
 from LID_datasets import OpenLIDDataset
 from collators import OnTheFlyTokenizationCollator
@@ -54,6 +55,7 @@ def finetune_model(
     train_dataset,
     eval_dataset,
     device,
+    resume_from_checkpoint,
     output_dir='./finetuned',
     learning_rate=5e-5,
     batch_size=24,
@@ -85,7 +87,6 @@ def finetune_model(
         remove_unused_columns=False,
         dataloader_pin_memory=False,
         report_to="wandb",
-        resume_from_checkpoint=True,
     )
 
     metric = evaluate.load("accuracy")
@@ -105,7 +106,7 @@ def finetune_model(
         compute_metrics=compute_metrics
     )
 
-    trainer.train(resume_from_checkpoint=True)
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     logging.info("Saving the model...")
 
@@ -131,6 +132,10 @@ def main():
                         help="The batch size to use")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
+    parser.add_argument("--no-resume", default=False, action="store_true",
+                        help="Don't attempt to resume from checkpoint, start training from scratch")
+    parser.add_argument("--checkpoint-path", type=str, default=None,
+                        help="Specific checkpoint path to resume from (overrides automatic detection)")
     args = parser.parse_args()
 
     load_dotenv()
@@ -149,8 +154,19 @@ def main():
     label_encoder = load_object(args.encoder_path)
     num_labels = len(label_encoder.classes_)
 
-    model = CanineForSequenceClassification.from_pretrained(
+    checkpoint_path = get_checkpoint(
+        args.no_resume, args.checkpoint_path, args.model_path)
+
+    if checkpoint_path is None:
+        logging.info("Initializing new model...")
+        model = CanineForSequenceClassification.from_pretrained(
         "google/canine-c", num_labels=num_labels).to(device)
+    else:
+        model = CanineForSequenceClassification.from_pretrained(
+            checkpoint_path, num_labels=num_labels).to(device)
+
+    if model is None:
+        raise RuntimeError("Unable to load model. Shutting down.")
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
     train_dataset = OpenLIDDataset(train_texts, train_labels, label_encoder)
@@ -163,6 +179,7 @@ def main():
         train_dataset,
         eval_dataset,
         device=device,
+        resume_from_checkpoint=checkpoint_path,
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,
