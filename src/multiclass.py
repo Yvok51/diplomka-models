@@ -30,7 +30,7 @@ MODEL_PATH = PROJECT_PATH / "finetuned"  # Default path to your finetuned model
 
 SAMPLES_PER_LANGUAGE = 10_000
 
-EVAL_PHASES = 10
+EVAL_PHASES = 200
 EVAL_STEPS = 200_000
 LOG_STEPS = 100
 
@@ -145,7 +145,7 @@ def main():
     logging.info("Using device: %s", device)
 
     train_texts, eval_texts, train_labels, eval_labels, = load_dataset(
-        args.samples_per_language)
+        args.samples_per_language, test_size=0.001)
     label_encoder = load_object(args.encoder_path)
     num_labels = len(label_encoder.classes_)
 
