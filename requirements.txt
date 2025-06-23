@@ -1,13 +1,13 @@
-transformers
+transformers == 4.50.3
 transformers[torch]
-datasets
-evaluate
-numpy
-pandas
-scikit-learn
+datasets == 3.5.0
+evaluate == 0.4.3
+numpy == 2.2.4
+pandas == 2.2.3
+scikit-learn == 1.6.1
 python-dotenv
 matplotlib
 PyQt6 # needed for my linux for matplotlib
 tqdm
-wandb
-lang2vec
+wandb == 0.19.9
+lang2vec == 1.1.2
