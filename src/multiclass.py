@@ -62,6 +62,8 @@ def finetune_model(
     num_train_epochs=1,
     weight_decay=0.01,
     max_length=2048,
+    warmup_ratio=0.0,
+    no_report=False,
 ):
     collator = OnTheFlyTokenizationCollator(
         tokenizer=tokenizer, max_length=max_length, device=device)
@@ -77,6 +79,7 @@ def finetune_model(
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         learning_rate=learning_rate,
+        warmup_ratio=warmup_ratio,
         weight_decay=weight_decay,
         num_train_epochs=num_train_epochs,
         save_total_limit=3,
@@ -86,7 +89,7 @@ def finetune_model(
         logging_steps=LOG_STEPS,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
-        report_to="wandb",
+        report_to="none" if no_report else "wandb",
     )
 
     metric = evaluate.load("accuracy")
@@ -130,12 +133,24 @@ def main():
                         help="The number of training epochs")
     parser.add_argument("--batch-size", type=int, default=96,
                         help="The batch size to use")
+    parser.add_argument("--learning-rate", type=float,
+                        default=5e-5, help="Starting learning rate")
+    parser.add_argument("--warmup-ratio", type=float, default=0.0,
+                        help="Portion of the training dedicated to warming up the learning rate")
+    parser.add_argument("--no-report", default=False, action="store_true", help="Report the learning progress to W&B")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
     parser.add_argument("--no-resume", default=False, action="store_true",
                         help="Don't attempt to resume from checkpoint, start training from scratch")
     parser.add_argument("--checkpoint-path", type=str, default=None,
                         help="Specific checkpoint path to resume from (overrides automatic detection)")
+
+    subparsers = parser.add_subparsers()
+    existing_parser = subparsers.add_parser(
+        "existing", help="Further finetuned an already finetuned model")
+    existing_parser.add_argument(
+        "path", type=str, help="Path to the directory containing the finetuned model")
+
     args = parser.parse_args()
 
     load_dotenv()
@@ -154,23 +169,29 @@ def main():
     label_encoder = load_object(args.encoder_path)
     num_labels = len(label_encoder.classes_)
 
+    train_dataset = OpenLIDDataset(train_texts, train_labels, label_encoder)
+    eval_dataset = OpenLIDDataset(eval_texts, eval_labels, label_encoder)
+
+    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
+
     checkpoint_path = get_checkpoint(
         args.no_resume, args.checkpoint_path, args.model_path)
 
-    if checkpoint_path is None:
-        logging.info("Initializing new model...")
+    if args.command == "existing":
         model = CanineForSequenceClassification.from_pretrained(
-        "google/canine-c", num_labels=num_labels).to(device)
+            args.path, num_labels=num_labels).to(device)
+
     else:
-        model = CanineForSequenceClassification.from_pretrained(
-            checkpoint_path, num_labels=num_labels).to(device)
+        if checkpoint_path is None:
+            logging.info("Initializing new model...")
+            model = CanineForSequenceClassification.from_pretrained(
+                "google/canine-c", num_labels=num_labels).to(device)
+        else:
+            model = CanineForSequenceClassification.from_pretrained(
+                checkpoint_path, num_labels=num_labels).to(device)
 
     if model is None:
         raise RuntimeError("Unable to load model. Shutting down.")
-    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
-
-    train_dataset = OpenLIDDataset(train_texts, train_labels, label_encoder)
-    eval_dataset = OpenLIDDataset(eval_texts, eval_labels, label_encoder)
 
     logging.info("Finetuning...")
     finetune_model(
@@ -183,7 +204,10 @@ def main():
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,
-        max_length=args.max_length
+        max_length=args.max_length,
+        learning_rate=args.learning_rate,
+        warmup_ratio=args.warmup_ratio,
+        no_report=args.no_report
     )
 
 

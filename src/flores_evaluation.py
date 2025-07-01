@@ -11,7 +11,10 @@ from sklearn.metrics import confusion_matrix, f1_score, multilabel_confusion_mat
 import numpy as np
 import tqdm
 
-from common import load_object, PROJECT_PATH
+import fasttext
+from huggingface_hub import hf_hub_download
+
+from common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID
 from prediction import predict_multiclass, predict_multilabel
 from multilabel import CanineForMultiLabelClassification
 
@@ -32,7 +35,7 @@ class FLORESDataset(torch.utils.data.Dataset):
         return len(self.sentences)
 
 
-def get_test_dataset(known_sentences: list[str] | None = None):
+def get_test_dataset(known_languages: list[str] | None = None):
     dataset = datasets.load_dataset(
         'facebook/flores', 'all', trust_remote_code=True)
     dataset = dataset['devtest']
@@ -42,7 +45,7 @@ def get_test_dataset(known_sentences: list[str] | None = None):
         for k, v in item.items():
             if k.startswith("sentence"):
                 language = k[9:]
-                if not known_sentences or language in known_sentences:
+                if not known_languages or language in known_languages:
                     data[language].append(v)
 
     return data
@@ -100,8 +103,8 @@ def main():
         description="Evaluation of language prediction using finetuned CANINE model")
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory of the finetuned model")
-    parser.add_argument("--type", choices=["multiclass", "multilabel"],
-                        help="The model which we are using", default="multilabel")
+    parser.add_argument("--type", choices=["multiclass", "multilabel", "fasttext", "glotlid", "openlid"],
+                        help="The model which we are using", default="fasttext")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
@@ -121,33 +124,55 @@ def main():
 
     encoder: LabelEncoder | MultiLabelBinarizer = load_object(
         args.encoder_path)
-    assert (isinstance(encoder, LabelEncoder) and args.type == "multiclass") or (
+    assert (args.type != "multiclass" and args.type != "multilabel") or (
+        isinstance(encoder, LabelEncoder) and args.type == "multiclass") or (
         isinstance(encoder, MultiLabelBinarizer) and args.type == "multilabel")
 
     logging.info("Loading data...")
     data = get_test_dataset(list(encoder.classes_))
 
     logging.info("Loading model...")
+
+    TYPES_CONFIG = {
+        "openlid": {"repo": "laurievb/OpenLID", "map": OPENLID_TO_OPENLID},
+        "glotlid": {"repo": "cis-lmu/glotlid", "map": GLOT_TO_OPENLID},
+        "fasttext": {"repo": "facebook/fasttext-language-identification", "map": FASTTEXT_TO_OPENLID}
+    }
+
     if args.type == "multiclass":
         model, tokenizer = get_multiclass_model(args.model_path, device)
         assert isinstance(model, CanineForSequenceClassification)
-    else:
+
+        def predict_func(sentence):
+            prediction = predict_multiclass(sentence, model, tokenizer, encoder, device)
+            return prediction[0][0]
+
+    elif args.type == "multilabel":
         model, tokenizer = get_multilabel_model(args.model_path, device)
         assert isinstance(model, CanineForMultiLabelClassification)
 
-    predict_func = predict_multiclass if args.type == "multiclass" else predict_multilabel
+        def predict_func(sentence):
+            prediction = predict_multilabel(sentence, model, tokenizer, encoder, device)
+            predicted_langs = list(zip(*prediction))[0] if len(prediction) > 0 else []
+            return predicted_langs
+
+    else:
+        config = TYPES_CONFIG[args.type]
+        model_path = hf_hub_download(
+            repo_id=config["repo"], filename="model.bin")
+        model = fasttext.load_model(model_path)
+
+        def predict_func(sentence):
+            prediction = model.predict(sentence)
+            return config["map"][prediction[0][0]]
 
     logging.info("Starting predictions...")
     # The actual predicted labels for different languages
     predictions: dict[str, list[list[str]]] = defaultdict(list)
     for lang, sentences in tqdm.tqdm(data.items()):
         for sentence in sentences:
-            prediction = predict_func(
-                sentence, model, tokenizer, encoder, device)
-            predicted_langs = list(
-                zip(*prediction))[0] if len(prediction) > 0 else []
-            predictions[lang].append(
-                predicted_langs if args.type == "multilabel" else predicted_langs[0])
+            prediction = predict_func(sentence)
+            predictions[lang].append(prediction)
 
     logging.info("Starting evaluations...")
     metrics: list = [
@@ -159,7 +184,7 @@ def main():
         (lambda predictions, gold: false_positive_rate(
             np.asarray(predictions),
             np.asarray(gold),
-            get_rates_multiclass if args.type == "multiclass" else get_rates_multilabel
+            get_rates_multilabel if args.type == "multilabel" else get_rates_multilabel
         ), "FPR")
     ]
 
@@ -168,13 +193,12 @@ def main():
     for lang, predicted in tqdm.tqdm(predictions.items()):
         encoded_predicted = encoder.transform(predicted)
         correct = encoder.transform(
-            [lang] if args.type == "multiclass" else [[lang]])[0]
-        if args.type == "multiclass":
-            labels = np.full(shape=len(predicted),
-                             fill_value=correct, dtype=int)
-        else:
-            labels = np.full(
-                shape=(len(predicted), *correct.shape), fill_value=correct, dtype=int)
+            [[lang]] if args.type == "multilabel" else [lang])[0]
+        labels = np.full(
+            shape=(len(predicted), *correct.shape) if args.type == "multilabel" else len(predicted),
+            fill_value=correct,
+            dtype=int
+        )
 
         total_predictions.extend(encoded_predicted)
         total_labels.extend(labels)
