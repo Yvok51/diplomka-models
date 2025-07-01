@@ -145,7 +145,7 @@ def main():
     parser.add_argument("--checkpoint-path", type=str, default=None,
                         help="Specific checkpoint path to resume from (overrides automatic detection)")
 
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(dest="command")
     existing_parser = subparsers.add_parser(
         "existing", help="Further finetuned an already finetuned model")
     existing_parser.add_argument(
