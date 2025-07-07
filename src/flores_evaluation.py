@@ -13,12 +13,13 @@ import tqdm
 
 import fasttext
 from huggingface_hub import hf_hub_download
+from gcld3 import NNetLanguageIdentifier
 
-from common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID
+from common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID, GCLD_TO_OPENLID
 from prediction import predict_multiclass, predict_multilabel
 from multilabel import CanineForMultiLabelClassification
 
-ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
+ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
 # Default path to your finetuned model
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch_1_samples-20000_synthetic_0"
 
@@ -103,7 +104,7 @@ def main():
         description="Evaluation of language prediction using finetuned CANINE model")
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory of the finetuned model")
-    parser.add_argument("--type", choices=["multiclass", "multilabel", "fasttext", "glotlid", "openlid"],
+    parser.add_argument("--type", choices=["multiclass", "multilabel", "fasttext", "glotlid", "openlid", "gcld3"],
                         help="The model which we are using", default="fasttext")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
@@ -124,8 +125,7 @@ def main():
 
     encoder: LabelEncoder | MultiLabelBinarizer = load_object(
         args.encoder_path)
-    assert (args.type != "multiclass" and args.type != "multilabel") or (
-        isinstance(encoder, LabelEncoder) and args.type == "multiclass") or (
+    assert (isinstance(encoder, LabelEncoder) and args.type != "multilabel") or (
         isinstance(encoder, MultiLabelBinarizer) and args.type == "multilabel")
 
     logging.info("Loading data...")
@@ -144,7 +144,8 @@ def main():
         assert isinstance(model, CanineForSequenceClassification)
 
         def predict_func(sentence):
-            prediction = predict_multiclass(sentence, model, tokenizer, encoder, device)
+            prediction = predict_multiclass(
+                sentence, model, tokenizer, encoder, device)
             return prediction[0][0]
 
     elif args.type == "multilabel":
@@ -152,9 +153,17 @@ def main():
         assert isinstance(model, CanineForMultiLabelClassification)
 
         def predict_func(sentence):
-            prediction = predict_multilabel(sentence, model, tokenizer, encoder, device)
-            predicted_langs = list(zip(*prediction))[0] if len(prediction) > 0 else []
+            prediction = predict_multilabel(
+                sentence, model, tokenizer, encoder, device)
+            predicted_langs = list(
+                zip(*prediction))[0] if len(prediction) > 0 else []
             return predicted_langs
+
+    elif args.type == "gcld3":
+        detector = NNetLanguageIdentifier(0, 512)
+        def predict_func(sentence):
+            prediction =  detector.FindLanguage(sentence).language
+            return GCLD_TO_OPENLID[prediction]
 
     else:
         config = TYPES_CONFIG[args.type]
@@ -191,11 +200,17 @@ def main():
     total_predictions = []
     total_labels = []
     for lang, predicted in tqdm.tqdm(predictions.items()):
-        encoded_predicted = encoder.transform(predicted)
+        predicted = np.asarray(predicted)
+        non_null = np.where(predicted != None)[0]
+        non_null_encoded = encoder.transform(predicted[non_null])
+        encoded_predicted = np.full(shape=predicted.shape, fill_value=-1)
+        encoded_predicted[non_null] = non_null_encoded
+
         correct = encoder.transform(
             [[lang]] if args.type == "multilabel" else [lang])[0]
         labels = np.full(
-            shape=(len(predicted), *correct.shape) if args.type == "multilabel" else len(predicted),
+            shape=(len(predicted), *
+                   correct.shape) if args.type == "multilabel" else len(predicted),
             fill_value=correct,
             dtype=int
         )
@@ -208,9 +223,12 @@ def main():
 
     for metric, name in metrics:
         values = metric(total_predictions, total_labels)
-        for idx, lang in enumerate(encoder.classes_):
-            print(f"{name},{lang},{values[idx]}",
-                  file=args.output)
+
+        tested_lang_idx = np.unique(np.concatenate((total_predictions, total_labels)))
+        tested_langs = np.asarray(encoder.classes_)[tested_lang_idx]
+
+        for idx, lang in enumerate(tested_langs):
+            print(f"{name},{lang},{values[idx]}", file=args.output)
 
         print(f"{name},all,{np.average(values)}", file=args.output)
 
