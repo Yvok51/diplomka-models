@@ -11,9 +11,7 @@ from sklearn.metrics import confusion_matrix, f1_score, multilabel_confusion_mat
 import numpy as np
 import tqdm
 
-import fasttext
 from huggingface_hub import hf_hub_download
-from gcld3 import NNetLanguageIdentifier
 
 from common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID, GCLD_TO_OPENLID
 from prediction import predict_multiclass, predict_multilabel
@@ -160,12 +158,16 @@ def main():
             return predicted_langs
 
     elif args.type == "gcld3":
+        from gcld3 import NNetLanguageIdentifier
+
         detector = NNetLanguageIdentifier(0, 512)
         def predict_func(sentence):
             prediction =  detector.FindLanguage(sentence).language
             return GCLD_TO_OPENLID[prediction]
 
     else:
+        import fasttext
+
         config = TYPES_CONFIG[args.type]
         model_path = hf_hub_download(
             repo_id=config["repo"], filename="model.bin")

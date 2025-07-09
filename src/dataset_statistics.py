@@ -1,5 +1,6 @@
 import os
 import math
+import random
 
 import datasets
 from matplotlib import pyplot as plt
@@ -28,7 +29,7 @@ def dataset_statistics():
         512: 0,
         256: 0,
     }
-    step = 100
+    step = random.randint(80, 120)
     for idx in tqdm.tqdm(range(0, len(dataset["train"]), step)):
         item = dataset["train"][idx]
         if item["text"]:
