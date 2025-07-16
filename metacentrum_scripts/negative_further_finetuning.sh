@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N multiclass_langID
+#PBS -N negative_langID
 #PBS -l select=1:ncpus=4:ngpus=1:mem=64gb:scratch_local=10gb:gpu_mem=16gb
 #PBS -l walltime=300:00:00
 
@@ -21,7 +21,7 @@ git pull
 venv/bin/pip install -r requirements.txt
 venv/bin/pip install -r requirements-pytorch.txt
 
-venv/bin/python3 src/multiclass.py --epochs 1 --batch-size 128 --learning-rate 1e-5 --warmup-ratio 0.05 --model-path further_multiclass_metacentrum_output existing long_multiclass_output
+venv/bin/python3 src/multilabel.py --epochs 1 --batch-size 64 --learning-rate 1e-5 --warmup-ratio 0.05 --model-path further_negative_metacentrum_output existing long_negative_output
 mkdir results
-venv/bin/python3 src/flores_evaluation.py --model-path further_multiclass_metacentrum_output --type multiclass --encoder-path trainer_output/label_encoder.pkl --output "results/flores_further_multiclass_long.txt"
+venv/bin/python3 src/flores_evaluation.py --model-path further_negative_metacentrum_output --type multilabel --encoder-path trainer_output/multilabel_encoder.pkl --output "results/flores_further_negative_long.txt"
 

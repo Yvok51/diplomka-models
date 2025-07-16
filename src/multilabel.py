@@ -235,7 +235,9 @@ def finetune_model(
     batch_size=16,
     num_train_epochs=3,
     weight_decay=0.01,
-    max_length=2048
+    max_length=2048,
+    warmup_ratio=0.0,
+    no_report=False,
 ):
     collator = OnTheFlyTokenizationCollator(
         tokenizer=tokenizer, max_length=max_length, device=device)
@@ -251,6 +253,7 @@ def finetune_model(
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         learning_rate=learning_rate,
+        warmup_ratio=warmup_ratio,
         weight_decay=weight_decay,
         num_train_epochs=num_train_epochs,
         save_total_limit=3,
@@ -261,7 +264,7 @@ def finetune_model(
         logging_steps=LOG_STEPS,
         remove_unused_columns=False,
         dataloader_pin_memory=False,
-        report_to="wandb",
+        report_to="none" if no_report else "wandb",
     )
 
     def compute_metrics(eval_pred):
@@ -343,6 +346,11 @@ def main():
                         help="The number of training epochs")
     parser.add_argument("--batch-size", type=int, default=64,
                         help="The batch size to use")
+    parser.add_argument("--learning-rate", type=float,
+                        default=5e-5, help="Starting learning rate")
+    parser.add_argument("--warmup-ratio", type=float, default=0.0,
+                        help="Portion of the training dedicated to warming up the learning rate")
+    parser.add_argument("--no-report", default=False, action="store_true", help="Report the learning progress to W&B")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
     parser.add_argument("--synthetic-proportion", type=float,
@@ -355,6 +363,13 @@ def main():
                         help="Don't attempt to resume from checkpoint, start training from scratch")
     parser.add_argument("--checkpoint-path", type=str, default=None,
                         help="Specific checkpoint path to resume from (overrides automatic detection)")
+
+    subparsers = parser.add_subparsers(dest="command")
+    existing_parser = subparsers.add_parser(
+        "existing", help="Further finetuned an already finetuned model")
+    existing_parser.add_argument(
+        "path", type=str, help="Path to the directory containing the finetuned model")
+
     args = parser.parse_args()
 
     load_dotenv()
@@ -379,24 +394,29 @@ def main():
         negative_sampling=args.negative_sampling
     )
 
-    checkpoint_path = get_checkpoint(
-        args.no_resume, args.checkpoint_path, args.model_path)
-
-    if checkpoint_path is None:
-        logging.info("Initializing new model...")
-        model = CanineForMultiLabelClassification(config)
-    else:
-        model = load_model_from_checkpoint(checkpoint_path, config)
-
-    if model is None:
-        raise RuntimeError("Unable to load model. Shutting down.")
-    model.to(device)
-    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
-
     train_dataset = SyntheticOpenLIDDataset(
         train_texts, train_labels, mlb, args.synthetic_proportion)
     eval_dataset = SyntheticOpenLIDDataset(
         eval_texts, eval_labels, mlb, args.synthetic_proportion)
+
+    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
+
+    checkpoint_path = get_checkpoint(
+        args.no_resume, args.checkpoint_path, args.model_path)
+
+    if args.command == "existing":
+        model = CanineForMultiLabelClassification.from_pretrained(
+            args.path).to(device)
+
+    else:
+        if checkpoint_path is None:
+            logging.info("Initializing new model...")
+            model = CanineForMultiLabelClassification(config).to(device)
+        else:
+            model = load_model_from_checkpoint(checkpoint_path, config).to(device)
+
+    if model is None:
+        raise RuntimeError("Unable to load model. Shutting down.")
 
     # display_top(tracemalloc.take_snapshot(), limit=10)
 
@@ -411,7 +431,10 @@ def main():
         output_dir=args.model_path,
         num_train_epochs=args.epochs,
         batch_size=args.batch_size,
-        max_length=args.max_length
+        max_length=args.max_length,
+        learning_rate=args.learning_rate,
+        warmup_ratio=args.warmup_ratio,
+        no_report=args.no_report
     )
 
 
