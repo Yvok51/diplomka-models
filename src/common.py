@@ -241,6 +241,52 @@ OPENLID_CLASSES = [
 ]
 
 
+WIKIDATA_ENTITIES = {
+    'ace': 'Q27683', 'acm': 'Q56232', 'acq': '', 'aeb': 'Q56240', 'afr': 'Q14196',
+    'als': 'Q387066', 'amh': 'Q28244', 'apc': 'Q56593', 'arb': 'Q13955', 'ars': 'Q56574', 'ary': 'Q56426',
+    'arz': 'Q29919', 'asm': 'Q29401', 'ast': 'Q29507', 'awa': 'Q29579', 'ayr': 'Q20526610', 'azb': 'Q3449805',
+    'azj': 'Q9292', 'bak': 'Q13389', 'bam': 'Q33243', 'ban': 'Q33070', 'bel': 'Q9091', 'bem': '',
+    'ben': 'Q9610', 'bho': 'Q33268', 'bjn': 'Q33151', 'bod': 'Q34271', 'bos': 'Q9303',
+    'bug': 'Q33190', 'bul': 'Q7918', 'cat': 'Q7026', 'ceb': 'Q33239', 'ces': 'Q9056', 'cjk': 'Q2422065',
+    'ckb': 'Q36811', 'cmn': 'Q24841726', 'crh': 'Q33357', 'cym': 'Q9309', 'dan': 'Q9035',
+    'deu': 'Q188', 'dik': 'Q56466', 'dyu': '', 'dzo': 'Q33081', 'ekk': '', 'ell': 'Q9129',
+    'eng': 'Q1860', 'epo': '', 'eus': 'Q8752', 'ewe': 'Q30005', 'fao': 'Q25258', 'fij': 'Q33295',
+    'fil': '', 'fin': 'Q1412', 'fon': 'Q33291', 'fra': 'Q150', 'fur': 'Q33441', 'fuv': '',
+    'gaz': 'Q12639015', 'gla': 'Q9314', 'gle': 'Q9142', 'glg': 'Q9307', 'gug': '', 'guj': 'Q5137',
+    'hat': 'Q33491', 'hau': 'Q56475', 'heb': 'Q9288', 'hin': 'Q1568', 'hne': '', 'hrv': 'Q6654',
+    'hun': 'Q9067', 'hye': 'Q8785', 'ibo': 'Q33578', 'ilo': 'Q35936', 'ind': 'Q9240', 'isl': 'Q294',
+    'ita': 'Q652', 'jav': 'Q33549', 'jpn': 'Q5287', 'kab': 'Q35853', 'kac': '', 'kam': 'Q33587',
+    'kan': 'Q33673', 'kas': 'Q33552', 'kat': 'Q8108', 'kaz': 'Q9252', 'kbp': 'Q35475',
+    'kea': 'Q35963', 'khk': '', 'khm': 'Q9205', 'kik': 'Q33587', 'kin': 'Q33573', 'kir': 'Q9255',
+    'kmb': 'Q35891', 'kmr': 'Q36163', 'knc': 'Q15637215', 'kor': 'Q9176', 'ktu': '',
+    'lao': 'Q9211', 'lij': 'Q36106', 'lim': 'Q102172', 'lin': 'Q36217', 'lit': 'Q9083', 'lmo': 'Q33754',
+    'ltg': 'Q36212', 'ltz': 'Q9051', 'lua': 'Q34173', 'lug': 'Q33368', 'luo': '', 'lus': 'Q36147',
+    'lvs': 'Q9078', 'mag': '', 'mai': 'Q36109', 'mal': 'Q9237', 'mar': 'Q1571', 'min': 'Q13324',
+    'mkd': 'Q9296', 'mlt': 'Q9166', 'mni': 'Q33868', 'mos': 'Q36096', 'mri': 'Q36451', 'mya': 'Q9228',
+    'nld': 'Q7411', 'nno': 'Q9043', 'nob': 'Q9043', 'npi': 'Q33823', 'nso': 'Q33890', 'nus': 'Q33675',
+    'nya': '', 'oci': 'Q14185', 'ory': 'Q33810', 'pag': 'Q33879', 'pan': '', 'pap': 'Q33856',
+    'pbt': 'Q58680', 'pes': '', 'plt': 'Q15069308', 'pol': 'Q809', 'por': 'Q5146', 'prs': 'Q178440',
+    'quy': 'Q3573199', 'ron': 'Q7913', 'run': 'Q33583', 'rus': 'Q7737', 'sag': 'Q33954', 'san': 'Q11059',
+    'sat': 'Q33965', 'scn': 'Q33973', 'shn': 'Q56482', 'sin': 'Q13267', 'slk': 'Q9058', 'slv': 'Q9063',
+    'smo': 'Q34011', 'sna': 'Q34004', 'snd': 'Q33997', 'som': 'Q13275', 'sot': 'Q34340', 'spa': 'Q1321',
+    'srd': 'Q33976', 'srp': 'Q9299', 'ssw': 'Q34014', 'sun': 'Q34002', 'swe': 'Q9027', 'swh': 'Q7838',
+    'szl': 'Q30319', 'tam': 'Q5885', 'taq': '', 'tat': 'Q25285', 'tel': 'Q8097',
+    'tgk': 'Q9260', 'tha': 'Q9217', 'tir': 'Q34124', 'tpi': 'Q34159', 'tsn': 'Q34137', 'tso': 'Q34327',
+    'tuk': 'Q9267', 'tum': 'Q34138', 'tur': 'Q256', 'twi': 'Q36850', 'uig': 'Q13263', 'ukr': 'Q8798',
+    'umb': '', 'urd': 'Q1617', 'uzn': 'Q9264', 'vec': 'Q32724', 'vie': 'Q9199', 'war': 'Q34279',
+    'wol': 'Q34257', 'xho': 'Q13218', 'ydd': 'Q8641', 'yor': 'Q34311', 'yue': 'Q7033959', 'zgh': 'Q7850',
+    'zsm': 'Q9237', 'zul': 'Q10179',
+    "alb": "Q8748",
+    "ber": "Q25448",
+    "cnt": "Q9186",
+    "grn": "Q35876",
+    "idu": "Q35224",
+    "lat": "Q397",
+    "ndb": "Q35613",
+    "nqo": "Q2494019",
+    "icl": "Q294",
+}
+
 FASTTEXT_TO_OPENLID = KeyDict(classes=OPENLID_CLASSES)
 GLOT_TO_OPENLID = KeyDict(classes=OPENLID_CLASSES)
 OPENLID_TO_OPENLID = KeyDict(classes=OPENLID_CLASSES)
@@ -354,4 +400,11 @@ GCLD_TO_OPENLID = {
     'zh': 'cmn_Hans',
     'zh-Latn': 'cmn_Hans',
     'zu': 'zul_Latn'
+}
+
+
+lang_iso_replacements = {
+    "arb": "ara",
+    "icl": "isl",
+    "zsm": "msa",
 }
