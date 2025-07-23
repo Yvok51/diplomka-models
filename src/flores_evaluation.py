@@ -19,7 +19,7 @@ from multilabel import CanineForMultiLabelClassification
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
 # Default path to your finetuned model
-MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch_1_samples-20000_synthetic_0"
+MODEL_PATH = PROJECT_PATH / "finished_multiclass"
 
 
 class FLORESDataset(torch.utils.data.Dataset):
@@ -103,7 +103,7 @@ def main():
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory of the finetuned model")
     parser.add_argument("--type", choices=["multiclass", "multilabel", "fasttext", "glotlid", "openlid", "gcld3"],
-                        help="The model which we are using", default="fasttext")
+                        help="The model which we are using", default="multiclass")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
@@ -158,6 +158,7 @@ def main():
             return predicted_langs
 
     elif args.type == "gcld3":
+        # imported here because it is trouble installing gcld3 in some environments (Metacentrum)
         from gcld3 import NNetLanguageIdentifier
 
         detector = NNetLanguageIdentifier(0, 512)
@@ -166,6 +167,7 @@ def main():
             return GCLD_TO_OPENLID[prediction]
 
     else:
+        # imported here because it is trouble installing fasttext in some environments (Metacentrum)
         import fasttext
 
         config = TYPES_CONFIG[args.type]
@@ -202,11 +204,14 @@ def main():
     total_predictions = []
     total_labels = []
     for lang, predicted in tqdm.tqdm(predictions.items()):
-        predicted = np.asarray(predicted)
-        non_null = np.where(predicted != None)[0]
-        non_null_encoded = encoder.transform(predicted[non_null])
-        encoded_predicted = np.full(shape=predicted.shape, fill_value=-1)
-        encoded_predicted[non_null] = non_null_encoded
+        if args.type == "multilabel":
+            encoded_predicted = encoder.transform(predicted)
+        else:
+            predicted = np.array(predicted)
+            non_null = np.where(predicted != None)[0]
+            non_null_encoded = encoder.transform(predicted[non_null])
+            encoded_predicted = np.full(shape=predicted.shape, fill_value=-1)
+            encoded_predicted[non_null] = non_null_encoded
 
         correct = encoder.transform(
             [[lang]] if args.type == "multilabel" else [lang])[0]
@@ -226,7 +231,11 @@ def main():
     for metric, name in metrics:
         values = metric(total_predictions, total_labels)
 
-        tested_lang_idx = np.unique(np.concatenate((total_predictions, total_labels)))
+        if args.type == "multilabel":
+            tested_lang_idx = np.where(np.concatenate((total_predictions, total_labels)).sum(axis=0) != 0)[0]
+        else:
+            tested_lang_idx = np.unique(np.concatenate((total_predictions, total_labels)))
+
         tested_langs = np.asarray(encoder.classes_)[tested_lang_idx]
 
         for idx, lang in enumerate(tested_langs):
