@@ -137,7 +137,8 @@ def main():
                         default=5e-5, help="Starting learning rate")
     parser.add_argument("--warmup-ratio", type=float, default=0.0,
                         help="Portion of the training dedicated to warming up the learning rate")
-    parser.add_argument("--no-report", default=False, action="store_true", help="Report the learning progress to W&B")
+    parser.add_argument("--no-report", default=False, action="store_true",
+                        help="Report the learning progress to W&B")
     parser.add_argument("--max-length", type=int, default=512,
                         help="The max length of the tokenized input. The model maximum is 2048")
     parser.add_argument("--no-resume", default=False, action="store_true",
@@ -177,18 +178,21 @@ def main():
     checkpoint_path = get_checkpoint(
         args.no_resume, args.checkpoint_path, args.model_path)
 
-    if args.command == "existing":
+    if checkpoint_path:
+        logging.info("Restarting training from checkpoint %s...",
+                     checkpoint_path)
+        model = CanineForSequenceClassification.from_pretrained(
+            checkpoint_path, num_labels=num_labels).to(device)
+
+    elif args.command == "existing":
+        logging.info("Further finetuning for model %s", args.path)
         model = CanineForSequenceClassification.from_pretrained(
             args.path, num_labels=num_labels).to(device)
 
     else:
-        if checkpoint_path is None:
-            logging.info("Initializing new model...")
-            model = CanineForSequenceClassification.from_pretrained(
-                "google/canine-c", num_labels=num_labels).to(device)
-        else:
-            model = CanineForSequenceClassification.from_pretrained(
-                checkpoint_path, num_labels=num_labels).to(device)
+        logging.info("Initializing new model...")
+        model = CanineForSequenceClassification.from_pretrained(
+            "google/canine-c", num_labels=num_labels).to(device)
 
     if model is None:
         raise RuntimeError("Unable to load model. Shutting down.")
