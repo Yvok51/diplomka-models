@@ -108,11 +108,11 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
                         default=42, help="Path to the label encoder")
-    parser.add_argument("--max-length", type=int, default=512,
-                        help="The max length of the tokenized input. The model maximum is 2048")
     parser.add_argument("--output", type=argparse.FileType('w'),
                         default=sys.stdout, help="The file to write the metrics to")
     args = parser.parse_args()
+
+    torch.manual_seed(args.seed)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

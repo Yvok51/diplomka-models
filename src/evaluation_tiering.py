@@ -120,7 +120,7 @@ def collect_speakers() -> dict[str, int]:
     for lang, entity_id in tqdm.tqdm(WIKIDATA_ENTITIES.items(), "Gathering speaker counts"):
         if entity_id:
             speakers[lang] = int(get_number_of_speakers_from_entity(entity_id))
-            time.sleep(random.uniform(0.5, 1))
+            time.sleep(random.uniform(2, 4))
         else:
             speakers[lang] = 0
 
