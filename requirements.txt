@@ -13,3 +13,4 @@ wandb == 0.19.9
 lang2vec == 1.1.2
 fasttext == 0.9.3
 gcld3 == 3.0.13
+SPARQLWrapper == 2.0.0

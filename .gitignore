@@ -2,8 +2,9 @@
 venv/
 .vscode/
 .mypy_cache/
-finetuned*/
+*finetuned*/
 trainer_output/
 **/__pycache__/
-output*/
+*output*/
+*finished*/
 wandb/
