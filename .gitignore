@@ -8,3 +8,4 @@ trainer_output/
 *output*/
 *finished*/
 wandb/
+data/
