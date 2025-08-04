@@ -74,8 +74,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned CANINE model")
     parser.add_argument("--model-path", type=str, default=MODEL_PATH, help="Directory of the finetuned model")
-    parser.add_argument("--type", choices=["multiclass", "multiclass"],
-                        help="The model which we are using", default="multilabel")
+    parser.add_argument("--type", choices=["multiclass", "multilabel"],
+                        help="The model which we are using", default="multiclass")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
