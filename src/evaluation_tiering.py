@@ -199,12 +199,14 @@ def main():
         output_file = args.output[idx] if len(args.output) > 1 else args.output[0]
 
         if args.command == "tiered":
+            print(f"=== Tiered {file.name} ===", file=output_file)
             results = group_by_tier(metrics, language_tiers)
             for metric, tiers in results.items():
                 for tier, scores in enumerate(tiers):
                     print(f"{metric},{tier},{sum(scores) / len(scores)}", file=output_file)
 
         if args.command == "weighted":
+            print(f"=== Weighted {file.name} ===", file=output_file)
             results = weighted_results(metrics, language_weights_by_speaker_count())
             for metric, score in results.items():
                 print(f"{metric},{score}", file=output_file)
