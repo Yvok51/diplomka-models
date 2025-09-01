@@ -1,5 +1,4 @@
 import urllib.request
-from typing import TypedDict, Optional
 import csv
 import argparse
 import sys
@@ -47,7 +46,7 @@ def unzip_file(filename: str, extract_to: str):
 
 def read_bcms(filename: str):
     bcms = []
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding="utf-8") as f:
         reader = csv.reader(f, delimiter='\t')
         for row in reader:
             bcms.append({ "languages": [BCMS_TO_OPENLID[lang] for lang in row[0].split(",")], "text": row[1]})

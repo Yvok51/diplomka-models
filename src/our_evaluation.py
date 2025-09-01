@@ -27,7 +27,7 @@ def read_file(file, labels: list[str]):
     instances = []
     for instance in file:
         instances.append(
-            {"languages": [ISO_TO_OPENLID[label]for label in labels], "text": instance})
+            {"languages": [ISO_TO_OPENLID[label]for label in labels], "text": instance.strip()})
     return instances
 
 
@@ -112,10 +112,14 @@ def main():
         predictions.append(predict_func(item["text"]))
         gold.append(item["languages"])
 
+
     print(
         f"Loose accuracy: {compute_loose_accuracy(predictions, gold)}", file=args.output)
     print(
         f"Exact match accuracy: {compute_exact_match_accuracy(predictions, gold)}", file=args.output)
+    print("=== Instances ===", file=args.output)
+    for instance, prediction in zip(test_data, predictions):
+        print(f"{instance['text'].strip()}\t{prediction}", file=args.output)
 
 
 if __name__ == "__main__":
