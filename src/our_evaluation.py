@@ -1,33 +1,67 @@
 import argparse
 import sys
 import logging
+import glob
+from pathlib import Path
+import os
 
 import torch
 from transformers import CanineForSequenceClassification
-from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 import tqdm
 import numpy as np
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, precision_score, recall_score
 
-from common import PROJECT_PATH, load_object
+from common import PROJECT_PATH, load_object, GCLD_TO_OPENLID
 from flores_evaluation import get_multiclass_model, get_multilabel_model
 from prediction import predict_multiclass, predict_multilabel
 from multilabel import CanineForMultiLabelClassification
 
-ISO_TO_OPENLID = {"es": "esp_Latn", "bg": "bul_Cyrl", "mk": "mkd_Cyrl", "cs": "ces_Latn",
-                  "sk": "slk_Latn", "ca": "cat_Latn", "nl": "nld_Latn", "af": "afr_Latn", "no": "nob_Latn", "da": "dan_Latn", "pt": "por_Latn", "gl": "glg_Latn"}
 
 DATA_FOLDER = PROJECT_PATH / "data"
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
-MODEL_PATH = PROJECT_PATH / "finished_multiclass"
+MODEL_PATH = PROJECT_PATH / "finished_multilabel"
+
+
+def read_directory(path):
+    joint_dir = f"{path}/joint"
+    single_dir = f"{path}/single"
+
+    dataset = []
+
+    label_set = set()
+
+    for p in glob.iglob(f"{single_dir}/*.txt"):
+        if os.path.getsize(p) == 0:
+            continue
+
+        labels = [Path(p).stem]
+        label_set.update(labels)
+        labels = [GCLD_TO_OPENLID[labels[0]]]
+        with open(p, "r", encoding='utf-8') as f:
+            for line in f:
+                dataset.append({"languages": labels, "text": line.strip()})
+
+    for p in glob.iglob(f"{joint_dir}/*.txt"):
+        if os.path.getsize(p) == 0:
+            continue
+
+        labels = [label for label in Path(p).stem.split("-")]
+        label_set.update(labels)
+        labels = [GCLD_TO_OPENLID[l] for l in labels]
+        with open(p, "r", encoding='utf-8') as f:
+            for line in f:
+                dataset.append({"languages": labels, "text": line.strip()})
+
+    return dataset, list(label_set)
 
 
 def read_file(file, labels: list[str]):
     instances = []
     for instance in file:
         instances.append(
-            {"languages": [ISO_TO_OPENLID[label]for label in labels], "text": instance.strip()})
+            {"languages": [GCLD_TO_OPENLID[label]for label in labels], "text": instance.strip()})
     return instances
 
 
@@ -44,11 +78,18 @@ def compute_exact_match_accuracy(predicted, gold):
     return sum([set(p) == set(y) for p, y in zip(predicted, gold)]) / len(gold)
 
 
-def compute_f1_score(predicted, gold, encoder: MultiLabelBinarizer):
+def compute_score(predicted, gold, encoder: MultiLabelBinarizer, metric):
     predicted = np.asarray(encoder.transform(predicted))
     gold = np.asarray(encoder.transform(gold))
 
-    return f1_score(predicted, gold, average=None, zero_division=0)
+    return metric(predicted, gold, average=None, zero_division=0)
+
+
+def value_indices(arr, values):
+    """Return indices in `arr` of the values in `values`. Returns the indices in the order of `values`."""
+    sorter = np.argsort(arr)
+    return sorter[np.searchsorted(arr, values, sorter=sorter)]
+    # np.in1d(arr, values).nonzero()[0]
 
 
 def main():
@@ -56,16 +97,22 @@ def main():
         description="Evaluation of language prediction using finetuned CANINE model")
     parser.add_argument("--model-path", type=str, default=MODEL_PATH,
                         help="Directory of the finetuned model")
-    parser.add_argument("--labels", type=str, nargs="+",
+    parser.add_argument("--labels", type=str, nargs="*",
                         help="The labels which the sentences are")
     parser.add_argument("--input", type=argparse.FileType('r'),
                         default=sys.stdin, help="Test sentences")
+    parser.add_argument("--input-dir", type=str, default=None,
+                        help="Instead of single file read an entire directory")
     parser.add_argument("--type", choices=["multiclass", "multilabel"],
-                        help="The model which we are using", default="multiclass")
+                        help="The model which we are using", default="multilabel")
     parser.add_argument("--multilabel-encoder", type=str,
                         default=str(ENCODER_PATH), help="Path to the multilabel encoder")
+    parser.add_argument("--encoder", type=str, default=str(ENCODER_PATH),
+                        help="Encoder to use with the model")
     parser.add_argument("--seed", type=int,
-                        default=42, help="Path to the label encoder")
+                        default=42, help="Seed for the random number generator")
+    parser.add_argument("--instances", action="store_true",
+                        help="Print predictions for individual instances")
     parser.add_argument("--output", type=argparse.FileType('w'),
                         default=sys.stdout, help="The file to write the metrics to")
     args = parser.parse_args()
@@ -79,11 +126,18 @@ def main():
 
     logging.info("Using device %s", device)
 
-    encoder: MultiLabelBinarizer = load_object(
+    multilabel_encoder: MultiLabelBinarizer = load_object(
         args.multilabel_encoder)
-    assert isinstance(encoder, MultiLabelBinarizer)
+    assert isinstance(multilabel_encoder, MultiLabelBinarizer)
+    encoder: MultiLabelBinarizer | LabelEncoder = load_object(args.encoder)
+    assert isinstance(multilabel_encoder, MultiLabelBinarizer)\
+        if args.type == "multilabel" else isinstance(encoder, LabelEncoder)
 
-    test_data = read_file(args.input, args.labels)
+    if args.input_dir:
+        test_data, labels = read_directory(args.input_dir)
+    else:
+        test_data = read_file(args.input, args.labels)
+        labels = args.labels
 
     if args.type == "multiclass":
         model, tokenizer = get_multiclass_model(args.model_path, device)
@@ -100,7 +154,7 @@ def main():
 
         def predict_func(sentence):
             prediction = predict_multilabel(
-                sentence, model, tokenizer, encoder, device)
+                sentence, model, tokenizer, multilabel_encoder, device)
             predicted_langs = list(
                 zip(*prediction))[0] if len(prediction) > 0 else []
             return list(predicted_langs)
@@ -112,14 +166,26 @@ def main():
         predictions.append(predict_func(item["text"]))
         gold.append(item["languages"])
 
-
     print(
         f"Loose accuracy: {compute_loose_accuracy(predictions, gold)}", file=args.output)
     print(
         f"Exact match accuracy: {compute_exact_match_accuracy(predictions, gold)}", file=args.output)
-    print("=== Instances ===", file=args.output)
-    for instance, prediction in zip(test_data, predictions):
-        print(f"{instance['text'].strip()}\t{prediction}", file=args.output)
+
+    print("=== Scores ===", file=args.output)
+    f1 = compute_score(predictions, gold, multilabel_encoder, f1_score)
+    precision = compute_score(predictions, gold, multilabel_encoder, precision_score)
+    recall = compute_score(predictions, gold, multilabel_encoder, recall_score)
+    indices = value_indices(
+        multilabel_encoder.classes_, [GCLD_TO_OPENLID[l] for l in labels])
+    for idx, label in zip(indices, labels):
+        print(
+            f"{label},{round(f1[idx], 4)},{round(precision[idx], 4)},{round(recall[idx], 4)}", file=args.output)
+
+    if args.instances:
+        print("=== Instances ===", file=args.output)
+        for instance, prediction, correct in zip(test_data, predictions, gold):
+            print(
+                f"{instance['text'].strip()}\t{prediction}\t{correct}", file=args.output)
 
 
 if __name__ == "__main__":

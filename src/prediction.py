@@ -1,6 +1,8 @@
 
 import torch
 import numpy as np
+from transformers import CanineForSequenceClassification, CanineTokenizer
+from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 
 from common import tokenize_input
 
@@ -18,7 +20,14 @@ def get_logits(text, model, tokenizer, device):
     return outputs['logits']
 
 
-def predict_multilabel(text, model, tokenizer, label_encoder, device, threshold=MULTILABEL_THRESHOLD):
+def predict_multilabel(
+    text: str,
+    model,
+    tokenizer: CanineTokenizer,
+    label_encoder: MultiLabelBinarizer,
+    device: str,
+    threshold: float = MULTILABEL_THRESHOLD
+):
     """Predict the language of a given text using a multilabel model."""
     logits = get_logits(text, model, tokenizer, device)
     probabilities = torch.sigmoid(logits).cpu().numpy()[0]
@@ -33,7 +42,13 @@ def predict_multilabel(text, model, tokenizer, label_encoder, device, threshold=
     return results
 
 
-def predict_multiclass(text, model, tokenizer, label_encoder, device):
+def predict_multiclass(
+    text: str,
+    model: CanineForSequenceClassification,
+    tokenizer: CanineTokenizer,
+    label_encoder: LabelEncoder,
+    device: str
+):
     """Predict the language of a given text using a multiclass model."""
     logits = get_logits(text, model, tokenizer, device)
     prediction = torch.argmax(logits, dim=-1).cpu().numpy()[0]
