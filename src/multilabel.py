@@ -10,7 +10,6 @@ from transformers import (
     CanineTokenizer,
     CanineModel,
     AutoTokenizer,
-    AutoModel,
     TrainingArguments,
     Trainer,
     PreTrainedModel,
@@ -219,9 +218,9 @@ class LangIDMultiLabelClassificationConfig(PretrainedConfig):
     model_type = "LangIDMultiLabelClassifier"
     classes: list[str] = ()
     negative_sampling = False
-    model = "google/canine-c"
+    model = "byt5"
 
-    def __init__(self, model="google/canine-c", classes=(), negative_sampling=False, **kwargs):
+    def __init__(self, model: ModelTypeT = "byt5", classes=(), negative_sampling=False, **kwargs):
         super().__init__(**kwargs)
         self.model = model
         self.classes = classes
@@ -234,17 +233,17 @@ class LangIDMultiLabelClassification(PreTrainedModel):
     def __init__(self, config: LangIDMultiLabelClassificationConfig):
         super().__init__(config)
         self.config = config
-        self.canine = AutoModel.from_pretrained(self.config.model)
+        self.model = MODELS[config.model].model_class.from_pretrained(MODELS[config.model].type)
         self.dropout = nn.Dropout(0.1)
         self.classifier = nn.Linear(
-            self.canine.config.hidden_size, len(self.config.classes))
+            self.model.config.hidden_size, len(self.config.classes))
         self.loss = NegativeSamplingBCELoss(
             config.classes) if config.negative_sampling else nn.BCEWithLogitsLoss()
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
         # Quick fix for bug in transformers package
         kwargs.pop("num_items_in_batch", None)
-        outputs = self.canine(
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             **kwargs
@@ -382,7 +381,7 @@ def get_multilabel_model(
         model = LangIDMultiLabelClassification.from_pretrained(
             model_path, config=config) if model_path else LangIDMultiLabelClassification(config)
         tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(
-            MODELS[model_type])
+            MODELS[model_type].type)
 
     return model.to(device), tokenizer
 
@@ -423,7 +422,7 @@ def get_config(
             negative_sampling=negative_sampling
         )
     else:
-        return LangIDMultiLabelClassificationConfig(MODELS[model_type], mlb.classes_.tolist(), negative_sampling)
+        return LangIDMultiLabelClassificationConfig(MODELS[model_type].type, mlb.classes_.tolist(), negative_sampling)
 
 
 def main():

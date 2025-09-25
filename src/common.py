@@ -7,10 +7,11 @@ import logging
 import math
 import glob
 from typing import Literal
+from dataclasses import dataclass
 
 import datasets
 import torch
-from transformers import CanineTokenizer
+from transformers import CanineTokenizer, PreTrainedModel, CanineModel, T5EncoderModel
 from sklearn.model_selection import train_test_split
 import tqdm
 
@@ -19,9 +20,14 @@ DATA_PATH = PROJECT_PATH / "trainer_output"
 
 ModelTypeT = Literal["canine", "byt5"]
 
-MODELS: dict[ModelTypeT, str] = {
-    "canine": "google/canine-c",
-    "byt5": "google/byt5-base"
+@dataclass
+class ModelType:
+    model_class: PreTrainedModel
+    type: ModelTypeT
+
+MODELS: dict[ModelTypeT, ModelType] = {
+    "canine": ModelType(CanineModel, "google/canine-c"),
+    "byt5": ModelType(T5EncoderModel, "google/byt5-base")
 }
 
 
