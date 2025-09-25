@@ -27,7 +27,7 @@ class ModelType:
 
 MODELS: dict[ModelTypeT, ModelType] = {
     "canine": ModelType(CanineModel, "google/canine-c"),
-    "byt5": ModelType(T5EncoderModel, "google/byt5-base")
+    "byt5": ModelType(T5EncoderModel, "google/byt5-small")
 }
 
 
