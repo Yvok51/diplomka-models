@@ -62,7 +62,7 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
             per_method = self.synthetic_length / len(self.synthetic)
             idx = int((idx - len(self.labels)) // per_method)
             # call one of the synthetic methods equally likely
-            return self.synthetic[idx](self)
+            return self.synthetic[idx]()
 
     def __len__(self):
         return self.length
