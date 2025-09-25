@@ -6,6 +6,7 @@ import os
 import logging
 import math
 import glob
+from typing import Literal
 
 import datasets
 import torch
@@ -15,6 +16,13 @@ import tqdm
 
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
 DATA_PATH = PROJECT_PATH / "trainer_output"
+
+ModelTypeT = Literal["canine", "byt5"]
+
+MODELS: dict[ModelTypeT, str] = {
+    "canine": "google/canine-c",
+    "byt5": "google/byt5"
+}
 
 
 def get_tokenized_inputs_path(max_length):

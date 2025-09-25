@@ -7,19 +7,19 @@ import datasets
 import torch
 from transformers import CanineForSequenceClassification, CanineTokenizer
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
-from sklearn.metrics import confusion_matrix, f1_score, multilabel_confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score, multilabel_confusion_matrix, precision_score, recall_score
 import numpy as np
 import tqdm
 
 from huggingface_hub import hf_hub_download
 
-from common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID, GCLD_TO_OPENLID
+from common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID, GCLD_TO_OPENLID, ModelTypeT, MODELS
 from prediction import predict_multiclass, predict_multilabel
-from multilabel import CanineForMultiLabelClassification
+from multilabel import get_multilabel_model
 
-ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
+ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 # Default path to your finetuned model
-MODEL_PATH = PROJECT_PATH / "finished_multiclass"
+MODEL_PATH = PROJECT_PATH / "finished_negative"
 
 
 class FLORESDataset(torch.utils.data.Dataset):
@@ -53,14 +53,6 @@ def get_test_dataset(known_languages: list[str] | None = None):
 def get_multiclass_model(model_path, device):
     model = CanineForSequenceClassification.from_pretrained(
         model_path, local_files_only=True).to(device)
-    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
-
-    return model, tokenizer
-
-
-def get_multilabel_model(model_path, device):
-    model = CanineForMultiLabelClassification.from_pretrained(
-        model_path).to(device)
     tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
 
     return model, tokenizer
@@ -100,12 +92,16 @@ def false_positive_rate(predictions, gold, get_rates):
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned CANINE model")
+    parser.add_argument("--model-type", type=ModelTypeT, choices=list(MODELS.keys()),
+                        default="canine", help="The underlying model type to train")
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory of the finetuned model")
     parser.add_argument("--type", choices=["multiclass", "multilabel", "fasttext", "glotlid", "openlid", "gcld3"],
-                        help="The model which we are using", default="multiclass")
+                        help="The model which we are using", default="multilabel")
     parser.add_argument("--encoder-path", type=str,
                         default=str(ENCODER_PATH), help="Path to the label encoder")
+    parser.add_argument("--confusion-matrix",
+                        action="store_true", help="Print out confusion matrix")
     parser.add_argument("--seed", type=int,
                         default=42, help="Path to the label encoder")
     parser.add_argument("--output", type=argparse.FileType('w'),
@@ -147,8 +143,8 @@ def main():
             return prediction[0][0]
 
     elif args.type == "multilabel":
-        model, tokenizer = get_multilabel_model(args.model_path, device)
-        assert isinstance(model, CanineForMultiLabelClassification)
+        model, tokenizer = get_multilabel_model(
+            args.model_path, device, args.model_type)
 
         def predict_func(sentence):
             prediction = predict_multilabel(
@@ -162,8 +158,9 @@ def main():
         from gcld3 import NNetLanguageIdentifier
 
         detector = NNetLanguageIdentifier(0, 512)
+
         def predict_func(sentence):
-            prediction =  detector.FindLanguage(sentence).language
+            prediction = detector.FindLanguage(sentence).language
             return GCLD_TO_OPENLID[prediction]
 
     else:
@@ -187,6 +184,25 @@ def main():
             prediction = predict_func(sentence)
             predictions[lang].append(prediction)
 
+    def get_confusion_matrix(predictions, gold):
+        if args.type == "multilabel":
+            gold = np.asarray(encoder.inverse_transform(gold))
+            predictions = encoder.inverse_transform(predictions)
+            nonzero = np.asarray([len(p) > 0 for p in predictions])
+            predictions = np.asarray([g if g[0] in p else [p[0]] for p, g, nonempty in zip(
+                predictions, gold, nonzero) if nonempty])
+            gold = gold[nonzero]
+            final_langs = np.unique(np.concatenate((gold, predictions)))
+        else:
+            valid = predictions >= 0
+            gold = gold[valid]
+            predictions = predictions[valid]
+            final_langs = encoder.inverse_transform(
+                np.unique(np.concatenate((gold, predictions))))
+
+        matrix = confusion_matrix(gold, predictions)
+        return matrix, final_langs
+
     logging.info("Starting evaluations...")
     metrics: list = [
         (lambda predictions, gold: f1_score(
@@ -198,7 +214,11 @@ def main():
             np.asarray(predictions),
             np.asarray(gold),
             get_rates_multilabel if args.type == "multilabel" else get_rates_multilabel
-        ), "FPR")
+        ), "FPR"),
+        (lambda predictions, gold: precision_score(y_pred=predictions,
+         y_true=gold, average=None, zero_division=0), "Precision"),
+        (lambda predictions, gold: recall_score(y_pred=predictions,
+         y_true=gold, average=None, zero_division=0), "Recall"),
     ]
 
     total_predictions = []
@@ -228,20 +248,26 @@ def main():
     total_labels = np.asarray(total_labels)
     total_predictions = np.asarray(total_predictions)
 
+    if args.type == "multilabel":
+        tested_lang_idx = np.where((total_labels).sum(axis=0) != 0)[0]
+    else:
+        tested_lang_idx = np.unique(total_labels)
+    tested_langs = np.asarray(encoder.classes_)[np.sort(tested_lang_idx)]
+
     for metric, name in metrics:
-        values = metric(total_predictions, total_labels)
-
-        if args.type == "multilabel":
-            tested_lang_idx = np.where(np.concatenate((total_predictions, total_labels)).sum(axis=0) != 0)[0]
-        else:
-            tested_lang_idx = np.unique(np.concatenate((total_predictions, total_labels)))
-
-        tested_langs = np.asarray(encoder.classes_)[tested_lang_idx]
-
+        values = metric(total_predictions, total_labels)[tested_lang_idx]
         for idx, lang in enumerate(tested_langs):
             print(f"{name},{lang},{values[idx]}", file=args.output)
 
         print(f"{name},all,{np.average(values)}", file=args.output)
+
+    if args.confusion_matrix or True:
+        print("=== Confusion matrix ===", file=args.output)
+        matrix, langs = get_confusion_matrix(total_predictions, total_labels)
+        print(9 * " " + " ".join(langs), file=args.output)
+        for line, lang in zip(matrix, langs):
+            print(f"{lang} " + "".join([str(n) + ((9 - len(str(n))) * " ")
+                  for n in line]), file=args.output)
 
 
 if __name__ == "__main__":

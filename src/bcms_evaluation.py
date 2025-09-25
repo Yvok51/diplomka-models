@@ -13,10 +13,10 @@ import tqdm
 import numpy as np
 from sklearn.metrics import f1_score
 
-from common import PROJECT_PATH, load_object
-from flores_evaluation import get_multiclass_model, get_multilabel_model
+from common import PROJECT_PATH, load_object, MODELS, ModelTypeT
+from flores_evaluation import get_multiclass_model
 from prediction import predict_multiclass, predict_multilabel
-from multilabel import CanineForMultiLabelClassification
+from multilabel import get_multilabel_model
 
 BCMS_TO_OPENLID = {"sr": "srp_Cyrl", "hr": "hrv_Latn", "me": "mkd_Cyrl", "bs": "bos_Latn"}
 
@@ -64,8 +64,8 @@ def compute_loose_accuracy(predicted, gold):
 def compute_exact_match_accuracy(predicted, gold):
     return sum([p == y for p, y in zip(predicted, gold)]) / len(gold)
 
-def encode_labels(list):
-    return np.asarray(["srp_Cyrl" in list, "hrv_Latn" in list, "mkd_Cyrl" in list, "bos_Latn" in list])
+def encode_labels(labels):
+    return np.asarray(["srp_Cyrl" in labels, "hrv_Latn" in labels, "mkd_Cyrl" in labels, "bos_Latn" in labels])
 
 def compute_f1_score(predicted, gold):
     predicted = np.asarray([encode_labels(labels) for labels in predicted])
@@ -76,6 +76,8 @@ def compute_f1_score(predicted, gold):
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned CANINE model")
+    parser.add_argument("--model-type", type=ModelTypeT, choices=list(MODELS.keys()),
+                        default="canine", help="The underlying model type to train")
     parser.add_argument("--model-path", type=str, default=MODEL_PATH, help="Directory of the finetuned model")
     parser.add_argument("--type", choices=["multiclass", "multilabel"],
                         help="The model which we are using", default="multiclass")
@@ -118,8 +120,7 @@ def main():
             return [prediction[0][0]]
 
     elif args.type == "multilabel":
-        model, tokenizer = get_multilabel_model(args.model_path, device)
-        assert isinstance(model, CanineForMultiLabelClassification)
+        model, tokenizer = get_multilabel_model(args.model_path, device, args.model_type)
 
         def predict_func(sentence):
             prediction = predict_multilabel(

@@ -12,10 +12,10 @@ import tqdm
 import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-from common import PROJECT_PATH, load_object, GCLD_TO_OPENLID
-from flores_evaluation import get_multiclass_model, get_multilabel_model
+from common import PROJECT_PATH, load_object, GCLD_TO_OPENLID, ModelTypeT, MODELS
+from flores_evaluation import get_multiclass_model
 from prediction import predict_multiclass, predict_multilabel
-from multilabel import CanineForMultiLabelClassification
+from multilabel import get_multilabel_model
 
 
 DATA_FOLDER = PROJECT_PATH / "data"
@@ -95,6 +95,8 @@ def value_indices(arr, values):
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned CANINE model")
+    parser.add_argument("--model-type", type=ModelTypeT, choices=list(MODELS.keys()),
+                        default="canine", help="The underlying model type to train")
     parser.add_argument("--model-path", type=str, default=MODEL_PATH,
                         help="Directory of the finetuned model")
     parser.add_argument("--labels", type=str, nargs="*",
@@ -149,8 +151,7 @@ def main():
             return [prediction[0][0]]
 
     elif args.type == "multilabel":
-        model, tokenizer = get_multilabel_model(args.model_path, device)
-        assert isinstance(model, CanineForMultiLabelClassification)
+        model, tokenizer = get_multilabel_model(args.model_path, device, args.model_type)
 
         def predict_func(sentence):
             prediction = predict_multilabel(

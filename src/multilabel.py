@@ -1,11 +1,16 @@
+"""Train multilabel model"""
+
 import os
 import logging
 import argparse
+from typing import Tuple
 
 from dotenv import load_dotenv
 from transformers import (
     CanineTokenizer,
     CanineModel,
+    AutoTokenizer,
+    AutoModel,
     TrainingArguments,
     Trainer,
     PreTrainedModel,
@@ -21,6 +26,8 @@ import lang2vec.lang2vec as l2v
 
 from common import (
     PROJECT_PATH,
+    MODELS,
+    ModelTypeT,
     load_dataset,
     load_object,
     save_object,
@@ -41,7 +48,6 @@ SYNTHETIC_LANGUAGE_SENTENCE_COUNT_CUTOFF = 100
 EVAL_PHASES = 200
 EVAL_STEPS = 200_000
 LOG_STEPS = 100
-
 
 def normalize_by_row(matrix: np.ndarray):
     """Normalize each row of a matrix to range 0 - 1"""
@@ -209,6 +215,54 @@ class CanineForMultiLabelClassification(PreTrainedModel):
         return {"logits": logits}
 
 
+class LangIDMultiLabelClassificationConfig(PretrainedConfig):
+    model_type = "LangIDMultiLabelClassifier"
+    classes: list[str] = ()
+    negative_sampling = False
+    model = "google/canine-c"
+
+    def __init__(self, model="google/canine-c", classes=(), negative_sampling=False, **kwargs):
+        super().__init__(**kwargs)
+        self.model = model
+        self.classes = classes
+        self.negative_sampling = negative_sampling
+
+
+class LangIDMultiLabelClassification(PreTrainedModel):
+    config_class = LangIDMultiLabelClassificationConfig
+
+    def __init__(self, config: LangIDMultiLabelClassificationConfig):
+        super().__init__(config)
+        self.config = config
+        self.canine = AutoModel.from_pretrained(self.config.model)
+        self.dropout = nn.Dropout(0.1)
+        self.classifier = nn.Linear(
+            self.canine.config.hidden_size, len(self.config.classes))
+        self.loss = NegativeSamplingBCELoss(
+            config.classes) if config.negative_sampling else nn.BCEWithLogitsLoss()
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
+        # Quick fix for bug in transformers package
+        kwargs.pop("num_items_in_batch", None)
+        outputs = self.canine(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **kwargs
+        )
+
+        pooled_output = outputs.pooler_output
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss(logits, labels.float())
+
+            return {"loss": loss, "logits": logits}
+
+        return {"logits": logits}
+
+
 def encode_multilabel(labels: list[str], encoder_path: str):
     """Encode the labels into a multilabel setup"""
     if os.path.exists(encoder_path):
@@ -307,7 +361,38 @@ def finetune_model(
     return model
 
 
-def load_model_from_checkpoint(checkpoint_path, config):
+def get_multilabel_model(
+    model_path: str | None,
+    device: str,
+    model_type: ModelTypeT,
+    config: CanineForMultiLabelClassificationConfig | LangIDMultiLabelClassificationConfig | None = None
+) -> Tuple[CanineForMultiLabelClassification | LangIDMultiLabelClassification, CanineTokenizer | AutoTokenizer]:
+    if model_type == "canine":
+        assert isinstance(
+            config, CanineForMultiLabelClassificationConfig) or config is None
+
+        model = CanineForMultiLabelClassification.from_pretrained(
+            model_path, config=config) if model_path else CanineForMultiLabelClassification(config)
+        tokenizer: CanineTokenizer = CanineTokenizer.from_pretrained(
+            "google/canine-c")
+    else:
+        assert isinstance(
+            config, LangIDMultiLabelClassificationConfig) or config is None
+
+        model = LangIDMultiLabelClassification.from_pretrained(
+            model_path, config=config) if model_path else LangIDMultiLabelClassification(config)
+        tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(
+            MODELS[model_type])
+
+    return model.to(device), tokenizer
+
+
+def load_model_from_checkpoint(
+    checkpoint_path,
+    device: str,
+    model_type: ModelTypeT,
+    config: CanineForMultiLabelClassificationConfig | LangIDMultiLabelClassificationConfig
+):
     """
     Load model from a specific checkpoint.
 
@@ -320,20 +405,32 @@ def load_model_from_checkpoint(checkpoint_path, config):
     """
     try:
         logging.info("Loading model from checkpoint: %s", checkpoint_path)
-        model = CanineForMultiLabelClassification.from_pretrained(
-            checkpoint_path,
-            config=config
-        )
-        return model
+        return get_multilabel_model(checkpoint_path, device, model_type=model_type, config=config)
     except Exception as e:
         logging.error(
             "Failed to load model from checkpoint %s: %s", checkpoint_path, e)
         return None
 
 
+def get_config(
+    mlb: MultiLabelBinarizer,
+    negative_sampling: bool,
+    model_type: ModelTypeT
+) -> LangIDMultiLabelClassificationConfig | CanineForMultiLabelClassificationConfig:
+    if model_type == "canine":
+        return CanineForMultiLabelClassificationConfig(
+            classes=mlb.classes_.tolist(),
+            negative_sampling=negative_sampling
+        )
+    else:
+        return LangIDMultiLabelClassificationConfig(MODELS[model_type], mlb.classes_.tolist(), negative_sampling)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Language prediction using finetuned CANINE model")
+    parser.add_argument("--model-type", type=str, choices=list(MODELS.keys()),
+                        default="canine", help="The underlying model type to train")
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory to put final the finetuned model")
     parser.add_argument("--encoder-path", type=str,
@@ -348,7 +445,7 @@ def main():
                         help="The batch size to use")
     parser.add_argument("--learning-rate", type=float,
                         default=5e-5, help="Starting learning rate")
-    parser.add_argument("--warmup-ratio", type=float, default=0.0,
+    parser.add_argument("--warmup-ratio", type=float, default=0.1,
                         help="Portion of the training dedicated to warming up the learning rate")
     parser.add_argument("--no-report", default=False, action="store_true",
                         help="Report the learning progress to W&B")
@@ -367,7 +464,7 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command")
     existing_parser = subparsers.add_parser(
-        "existing", help="Further finetuned an already finetuned model")
+        "existing", help="Further finetune an already finetuned model")
     existing_parser.add_argument(
         "path", type=str, help="Path to the directory containing the finetuned model")
 
@@ -390,34 +487,31 @@ def main():
         args.samples_per_language, test_size=0.001)
     mlb = load_object(args.encoder_path)
 
-    config = CanineForMultiLabelClassificationConfig(
-        classes=mlb.classes_.tolist(),
-        negative_sampling=args.negative_sampling
-    )
-
     train_dataset = SyntheticOpenLIDDataset(
         train_texts, train_labels, mlb, args.synthetic_proportion)
     eval_dataset = SyntheticOpenLIDDataset(
         eval_texts, eval_labels, mlb, args.synthetic_proportion)
 
-    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
-
     checkpoint_path = get_checkpoint(
         args.no_resume, args.checkpoint_path, args.model_path)
+
+    config = get_config(mlb, args.negative_sampling, args.model_type)
 
     if checkpoint_path:
         logging.info("Restarting training from checkpoint %s...",
                      checkpoint_path)
-        model = load_model_from_checkpoint(checkpoint_path, config).to(device)
+        model, tokenizer = load_model_from_checkpoint(
+            checkpoint_path=checkpoint_path, device=device, config=config, model_type=args.model_type)
 
     elif args.command == "existing":
         logging.info("Further finetuning for model %s", args.path)
-        model = CanineForMultiLabelClassification.from_pretrained(
-            args.path).to(device)
+        model, tokenizer = get_multilabel_model(
+            model_path=args.path, device=device, model_type=args.model_type)
 
     else:
         logging.info("Initializing new model...")
-        model = CanineForMultiLabelClassification(config).to(device)
+        model, tokenizer = get_multilabel_model(
+            model_path=None, device=device, model_type=args.model_type, config=config)
 
     if model is None:
         raise RuntimeError("Unable to load model. Shutting down.")

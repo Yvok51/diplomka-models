@@ -36,7 +36,7 @@ LANGUAGE_TIERS = [
 
     # 5
     # Arabic, Chinese, English, French, German, Japanese, Spanish
-    "arb,cmn,eng,fra,deu,jpn,spa",
+    "arb,yue,eng,fra,deu,jpn,spa",
 
     # from here
     # https://microsoft.github.io/linguisticdiversity/assets/lang2tax.txt
