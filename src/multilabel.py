@@ -249,7 +249,7 @@ class LangIDMultiLabelClassification(PreTrainedModel):
             **kwargs
         )
 
-        backbone_output = outputs.last_hidden_state
+        backbone_output = outputs.last_hidden_state[:, 0, :]
         backbone_output = self.dropout(backbone_output)
         logits = self.classifier(backbone_output)
 
