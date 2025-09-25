@@ -51,7 +51,7 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
         self.length = len(self.labels) + self.synthetic_length
         self.synthetic = [self.get_multilanguage_instance, self.get_transliterated_instance]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         logging.debug("Accessing index: %s", idx)
         if idx < len(self.labels):
             return {
@@ -60,7 +60,7 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
             }
         else:
             per_method = self.synthetic_length / len(self.synthetic)
-            idx = (idx - len(self.labels)) // per_method
+            idx = int((idx - len(self.labels)) // per_method)
             # call one of the synthetic methods equally likely
             return self.synthetic[idx](self)
 
