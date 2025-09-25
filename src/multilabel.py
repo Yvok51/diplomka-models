@@ -249,9 +249,9 @@ class LangIDMultiLabelClassification(PreTrainedModel):
             **kwargs
         )
 
-        pooled_output = outputs.pooler_output
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        backbone_output = outputs.last_hidden_state
+        backbone_output = self.dropout(backbone_output)
+        logits = self.classifier(backbone_output)
 
         loss = None
         if labels is not None:
