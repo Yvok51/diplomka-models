@@ -21,7 +21,7 @@ ModelTypeT = Literal["canine", "byt5"]
 
 MODELS: dict[ModelTypeT, str] = {
     "canine": "google/canine-c",
-    "byt5": "google/byt5"
+    "byt5": "google/byt5-base"
 }
 
 
