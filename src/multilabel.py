@@ -422,7 +422,7 @@ def get_config(
             negative_sampling=negative_sampling
         )
     else:
-        return LangIDMultiLabelClassificationConfig(MODELS[model_type].type, mlb.classes_.tolist(), negative_sampling)
+        return LangIDMultiLabelClassificationConfig(model_type, mlb.classes_.tolist(), negative_sampling)
 
 
 def main():
