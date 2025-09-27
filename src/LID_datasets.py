@@ -132,11 +132,11 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
         return {"text": text, "label": self.transform_labels([])}
 
     def get_random_number(self):
-        return ''.join((random.choice(string.digits) for _ in range(random.randint(1, 5))))
+        return ''.join([random.choice(string.digits) for _ in range(random.randint(1, 5))])
 
     def get_random_word(self):
         characters: list[str] = [random.choice(
-            string.ascii_lowercase for _ in range(random.randint(2, 7)))]
+            string.ascii_lowercase) for _ in range(random.randint(2, 7))]
         if chance(.1):
             characters.append(random.choice(string.punctuation))
         word: str = ''.join(characters)
