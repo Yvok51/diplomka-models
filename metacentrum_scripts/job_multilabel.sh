@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N negative_langID
+#PBS -N multilabel_langID
 #PBS -l select=1:ncpus=2:ngpus=1:mem=64gb:scratch_local=10gb:gpu_mem=15gb
 #PBS -l walltime=120:00:00
 
