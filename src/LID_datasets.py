@@ -1,8 +1,9 @@
 import random
 import logging
 from re import compile as re_compile
-from unidecode import unidecode
+import string
 
+from unidecode import unidecode
 import torch
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
@@ -39,6 +40,13 @@ class EncodedOpenLIDDataset(torch.utils.data.Dataset):
         return len(self.labels)
 
 
+TEXT_CHARACTERS = string.ascii_letters + string.digits + string.punctuation
+
+
+def chance(percentage):
+    return random.random() < percentage
+
+
 class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
     def __init__(self, texts: list[str], labels: list[str], encoder: MultiLabelBinarizer, synthetic_proportion: float = 1):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -47,16 +55,22 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
         self.labels = labels
         self.encoder = encoder
         self.synthetic_proportion = synthetic_proportion
-        self.synthetic_length = int(self.synthetic_proportion * len(self.labels))
+        self.synthetic_length = int(
+            self.synthetic_proportion * len(self.labels))
         self.length = len(self.labels) + self.synthetic_length
-        self.synthetic = [self.get_multilanguage_instance, self.get_transliterated_instance]
+
+        def weigh_synthetic(weighted_synthetic: list[tuple[any, int]]):
+            return [x for xs in [[f] * n for f, n in weighted_synthetic] for x in xs]
+
+        self.synthetic = weigh_synthetic([(self.get_multilanguage_instance, 4), (
+            self.get_transliterated_instance, 4), (self.get_random_instance, 1)])
 
     def __getitem__(self, idx: int):
         logging.debug("Accessing index: %s", idx)
         if idx < len(self.labels):
             return {
                 "text": self.texts[idx],
-                "label": self.transform_label(self.labels[idx])
+                "label": self.transform_labels([self.labels[idx]])
             }
         else:
             per_method = self.synthetic_length / len(self.synthetic)
@@ -101,7 +115,35 @@ class SyntheticOpenLIDDataset(torch.utils.data.Dataset):
         idx = np.random.randint(len(self.labels))
         transliterated = unidecode(self.texts[idx])
 
-        return {"text": transliterated, "label": self.transform_label(self.labels[idx])}
+        return {"text": transliterated, "label": self.transform_labels([self.labels[idx]])}
 
-    def transform_label(self, label):
-        return torch.from_numpy(self.encoder.transform([[label]])[0]).to(self.device)
+    def get_random_instance(self):
+        word_length = random.randint(1, 10)
+        words = []
+        for _ in range(word_length):
+            if chance(.05):
+                words.append(self.get_random_number())
+            else:
+                words.append(self.get_random_word())
+        if chance(.5):
+            words[0] = words[0].title()
+        text = " ".join(words)
+
+        return {"text": text, "label": self.transform_labels([])}
+
+    def get_random_number(self):
+        return ''.join((random.choice(string.digits) for _ in range(random.randint(1, 5))))
+
+    def get_random_word(self):
+        characters: list[str] = [random.choice(
+            string.ascii_lowercase for _ in range(random.randint(2, 7)))]
+        if chance(.1):
+            characters.append(random.choice(string.punctuation))
+        word: str = ''.join(characters)
+        if chance(.1):
+            word = word.title()
+
+        return word
+
+    def transform_labels(self, labels: list[str]):
+        return torch.from_numpy(self.encoder.transform([labels])[0]).to(self.device)

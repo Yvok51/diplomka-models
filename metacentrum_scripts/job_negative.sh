@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N negative_langID
 #PBS -l select=1:ncpus=2:ngpus=1:mem=64gb:scratch_local=10gb:gpu_mem=15gb
-#PBS -l walltime=20:00:00
+#PBS -l walltime=120:00:00
 
 # define a DATADIR variable: directory where the input files are taken from and where the output will be copied to
 MYHOME=/storage/brno2/home/michal-tichy
@@ -22,7 +22,7 @@ echo "HOME directory: ${HOME}"
 git pull
 
 MODEL_PATH="negative_${PORTION}_${TYPE}_output"
-venv/bin/python3 src/multilabel.py --samples-per-language 20000 --model-path "${MODEL_PATH}" --batch-size 16 --synthetic-proportion "${PORTION}" --negative-sampling --model-type "${TYPE}"
+venv/bin/python3 src/multilabel.py --samples-per-language 20000 --model-path "${MODEL_PATH}" --batch-size 8 --synthetic-proportion "${PORTION}" --negative-sampling --model-type "${TYPE}"
 venv/bin/python3 src/flores_evaluation.py --model-path "${MODEL_PATH}" --type multilabel --encoder-path trainer_output/multilabel_encoder.pkl --output "results/${MODEL_PATH}.txt" --confusion-matrix
 
 
