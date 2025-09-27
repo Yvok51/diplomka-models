@@ -18,7 +18,7 @@ import tqdm
 PROJECT_PATH = Path(__file__).parent.parent.resolve()
 DATA_PATH = PROJECT_PATH / "trainer_output"
 
-ModelTypeT = Literal["canine", "byt5"]
+ModelTypeT = Literal["canine", "byt5", "myt5"]
 
 @dataclass
 class ModelType:
@@ -27,7 +27,8 @@ class ModelType:
 
 MODELS: dict[ModelTypeT, ModelType] = {
     "canine": ModelType(CanineModel, "google/canine-c"),
-    "byt5": ModelType(T5EncoderModel, "google/byt5-small")
+    "byt5": ModelType(T5EncoderModel, "google/byt5-small"),
+    "myt5": ModelType(T5EncoderModel, "Tomlim/MyT5_small")
 }
 
 
