@@ -1,4 +1,5 @@
 import os
+import logging
 
 import torch.nn as nn
 from transformers import PretrainedConfig, PreTrainedModel, CanineModel
@@ -71,6 +72,7 @@ class LangIDMultiLabelClassification(PreTrainedModel):
     def __init__(self, config: LangIDMultiLabelClassificationConfig):
         super().__init__(config)
         self.config = config
+        logging.info("HUGGINGFACE_TOKEN: %s", os.environ.get("HUGGINGFACE_TOKEN"))
         self.model = MODELS[config.model].model_class.from_pretrained(MODELS[config.model].type, token=os.environ.get("HUGGINGFACE_TOKEN"))
         self.dropout = nn.Dropout(0.1)
         self.classifier = nn.Linear(
