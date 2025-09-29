@@ -15,7 +15,7 @@ from transformers import CanineTokenizer, PreTrainedModel, CanineModel, T5Encode
 from sklearn.model_selection import train_test_split
 import tqdm
 
-PROJECT_PATH = Path(__file__).parent.parent.resolve()
+PROJECT_PATH = Path(__file__).parent.parent.parent.resolve()
 DATA_PATH = PROJECT_PATH / "trainer_output"
 
 ModelTypeT = Literal["canine", "byt5", "myt5"]
