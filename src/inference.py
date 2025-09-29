@@ -9,7 +9,7 @@ import os
 from transformers import CanineTokenizer, CanineForSequenceClassification
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 
-from common import load_object, PROJECT_PATH
+from components.common import load_object, PROJECT_PATH
 from multiclass import ENCODER_PATH, MODEL_PATH
 from multilabel import CanineForMultiLabelClassification
 from prediction import predict_multiclass, predict_multilabel

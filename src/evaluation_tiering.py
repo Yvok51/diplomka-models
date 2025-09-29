@@ -9,7 +9,7 @@ import os
 
 import tqdm
 
-from common import WIKIDATA_ENTITIES, flores_to_iso, save_object, load_object, PROJECT_PATH
+from components.common import WIKIDATA_ENTITIES, flores_to_iso, save_object, load_object, PROJECT_PATH
 
 SPEAKERS_PATH = PROJECT_PATH / "trainer_output" / "speakers.pkl"
 

@@ -13,7 +13,7 @@ import tqdm
 import numpy as np
 from sklearn.metrics import f1_score
 
-from common import PROJECT_PATH, load_object, MODELS, ModelTypeT
+from components.common import PROJECT_PATH, load_object, MODELS, ModelTypeT
 from flores_evaluation import get_multiclass_model
 from prediction import predict_multiclass, predict_multilabel
 from multilabel import get_multilabel_model

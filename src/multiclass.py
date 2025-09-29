@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from sklearn.preprocessing import LabelEncoder
 
-from common import (
+from components.common import (
     load_dataset,
     save_object,
     load_object,

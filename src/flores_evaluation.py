@@ -13,7 +13,7 @@ import tqdm
 
 from huggingface_hub import hf_hub_download
 
-from common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID, GCLD_TO_OPENLID, ModelTypeT, MODELS
+from components.common import load_object, PROJECT_PATH, FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID, GCLD_TO_OPENLID, ModelTypeT, MODELS
 from prediction import predict_multiclass, predict_multilabel
 from multilabel import get_multilabel_model
 
