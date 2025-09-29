@@ -73,7 +73,7 @@ class LangIDMultiLabelClassification(PreTrainedModel):
         super().__init__(config)
         self.config = config
         logging.info("HUGGINGFACE_TOKEN: %s", os.environ.get("HUGGINGFACE_TOKEN"))
-        self.model = MODELS[config.model].model_class.from_pretrained(MODELS[config.model].type, token=os.environ.get("HUGGINGFACE_TOKEN"))
+        self.model = MODELS[config.model].model_class.from_pretrained(MODELS[config.model].type, token=os.environ.get("HUGGINGFACE_TOKEN"), use_safetensors=True)
         self.dropout = nn.Dropout(0.1)
         self.classifier = nn.Linear(
             self.model.config.hidden_size, len(self.config.classes))
