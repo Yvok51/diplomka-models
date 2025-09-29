@@ -32,6 +32,7 @@ from components.models import CanineForMultiLabelClassification, CanineForMultiL
 from components.prediction import predict_multilabel
 from LID_datasets import SyntheticOpenLIDDataset
 from components.collators import OnTheFlyTokenizationCollator
+from components.myt5_tokenizer import MyT5Tokenizer
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"
@@ -161,7 +162,7 @@ def get_multilabel_model(
     device: str,
     model_type: ModelTypeT,
     config: CanineForMultiLabelClassificationConfig | LangIDMultiLabelClassificationConfig | None = None
-) -> Tuple[CanineForMultiLabelClassification | LangIDMultiLabelClassification, CanineTokenizer | AutoTokenizer]:
+) -> Tuple[CanineForMultiLabelClassification | LangIDMultiLabelClassification, CanineTokenizer | AutoTokenizer | MyT5Tokenizer]:
     if model_type == "canine":
         assert isinstance(
             config, CanineForMultiLabelClassificationConfig) or config is None
@@ -176,8 +177,11 @@ def get_multilabel_model(
 
         model = LangIDMultiLabelClassification.from_pretrained(
             model_path, config=config) if model_path else LangIDMultiLabelClassification(config)
-        tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(
-            MODELS[model_type].type)
+        if model_type == "myt5":
+            tokenizer: MyT5Tokenizer = MyT5Tokenizer()
+        else:
+            tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(
+                MODELS[model_type].type)
 
     return model.to(device), tokenizer
 
