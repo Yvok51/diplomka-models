@@ -4,7 +4,7 @@ import numpy as np
 from transformers import CanineForSequenceClassification, CanineTokenizer
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 
-from common import tokenize_input
+from .common import tokenize_input
 
 MULTILABEL_THRESHOLD = 0.5
 

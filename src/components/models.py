@@ -1,8 +1,8 @@
 import torch.nn as nn
 from transformers import PretrainedConfig, PreTrainedModel, CanineModel
 
-from loss import NegativeSamplingBCELoss
-from common import MODELS, ModelTypeT
+from .loss import NegativeSamplingBCELoss
+from .common import MODELS, ModelTypeT
 
 class CanineForMultiLabelClassificationConfig(PretrainedConfig):
     model_type = "CanineMultiLabelClassifier"

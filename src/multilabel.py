@@ -29,9 +29,9 @@ from components.common import (
     get_checkpoint
 )
 from components.models import CanineForMultiLabelClassification, CanineForMultiLabelClassificationConfig, LangIDMultiLabelClassification, LangIDMultiLabelClassificationConfig
-from prediction import predict_multilabel
+from components.prediction import predict_multilabel
 from LID_datasets import SyntheticOpenLIDDataset
-from collators import OnTheFlyTokenizationCollator
+from components.collators import OnTheFlyTokenizationCollator
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel"

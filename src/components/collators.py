@@ -1,6 +1,6 @@
 import torch
 
-from common import tokenize_input
+from .common import tokenize_input
 
 
 class OnTheFlyTokenizationCollator:

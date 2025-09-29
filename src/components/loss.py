@@ -4,7 +4,7 @@ import torch.nn as nn
 from sklearn.preprocessing import minmax_scale
 import lang2vec.lang2vec as l2v
 
-from common import flores_to_iso
+from .common import flores_to_iso
 
 def normalize_by_row(matrix: np.ndarray):
     """Normalize each row of a matrix to range 0 - 1"""
