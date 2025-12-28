@@ -3,9 +3,13 @@ venv/
 .vscode/
 .mypy_cache/
 *finetuned*/
-trainer_output/
 **/__pycache__/
 *output*/
 *finished*/
 wandb/
 data/
+
+!trainer_output
+trainer_output/*
+!trainer_output/label_encoder.pkl
+!trainer_output/multilabel_encoder.pkl
