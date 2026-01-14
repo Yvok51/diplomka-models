@@ -12,7 +12,7 @@ from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 from components.common import load_object, PROJECT_PATH
 from multiclass import ENCODER_PATH, MODEL_PATH
 from multilabel import CanineForMultiLabelClassification
-from prediction import predict_multiclass, predict_multilabel
+from components.prediction import predict_multiclass, predict_multilabel
 
 MODEL_PATH = PROJECT_PATH / "finetuned_multilabel_epoch-2_samples-15000"
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"

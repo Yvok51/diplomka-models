@@ -14,7 +14,7 @@ from sklearn.metrics import f1_score
 
 from components.common import PROJECT_PATH, load_object, ModelTypeT, MODELS
 from flores_evaluation import get_multiclass_model
-from prediction import predict_multiclass, predict_multilabel
+from components.prediction import predict_multiclass, predict_multilabel
 from multilabel import get_multilabel_model
 
 class SLIDEItem(TypedDict):

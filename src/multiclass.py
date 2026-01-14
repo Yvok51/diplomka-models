@@ -24,7 +24,7 @@ from components.common import (
     get_checkpoint,
 )
 from LID_datasets import OpenLIDDataset
-from collators import OnTheFlyTokenizationCollator
+from components.collators import OnTheFlyTokenizationCollator
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "label_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finetuned"  # Default path to your finetuned model

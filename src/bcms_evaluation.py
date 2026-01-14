@@ -15,7 +15,7 @@ from sklearn.metrics import f1_score
 
 from components.common import PROJECT_PATH, load_object, MODELS, ModelTypeT
 from flores_evaluation import get_multiclass_model
-from prediction import predict_multiclass, predict_multilabel
+from components.prediction import predict_multiclass, predict_multilabel
 from multilabel import get_multilabel_model
 
 BCMS_TO_OPENLID = {"sr": "srp_Cyrl", "hr": "hrv_Latn", "me": "mkd_Cyrl", "bs": "bos_Latn"}

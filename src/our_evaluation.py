@@ -4,6 +4,8 @@ import logging
 import glob
 from pathlib import Path
 import os
+from typing import TypedDict
+import json
 
 import torch
 from transformers import CanineForSequenceClassification
@@ -13,9 +15,15 @@ import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 
 from components.common import PROJECT_PATH, load_object, GCLD_TO_OPENLID, ModelTypeT, MODELS
+from components.prediction import predict_multiclass, predict_multilabel
 from flores_evaluation import get_multiclass_model
-from prediction import predict_multiclass, predict_multilabel
 from multilabel import get_multilabel_model
+
+class Instance(TypedDict):
+    text: str
+    label: list[str]
+
+Dataset = dict[str, dict[str, list[Instance]]]
 
 
 DATA_FOLDER = PROJECT_PATH / "data"
@@ -24,7 +32,7 @@ ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finished_multilabel"
 
 
-def read_directory(path):
+def read_directory(path) -> list[Instance]:
     joint_dir = f"{path}/joint"
     single_dir = f"{path}/single"
 
@@ -41,7 +49,7 @@ def read_directory(path):
         labels = [GCLD_TO_OPENLID[labels[0]]]
         with open(p, "r", encoding='utf-8') as f:
             for line in f:
-                dataset.append({"languages": labels, "text": line.strip()})
+                dataset.append({"label": labels, "text": line.strip()})
 
     for p in glob.iglob(f"{joint_dir}/*.txt"):
         if os.path.getsize(p) == 0:
@@ -52,18 +60,21 @@ def read_directory(path):
         labels = [GCLD_TO_OPENLID[l] for l in labels]
         with open(p, "r", encoding='utf-8') as f:
             for line in f:
-                dataset.append({"languages": labels, "text": line.strip()})
+                dataset.append({"label": labels, "text": line.strip()})
 
     return dataset, list(label_set)
 
 
-def read_file(file, labels: list[str]):
-    instances = []
-    for instance in file:
-        instances.append(
-            {"languages": [GCLD_TO_OPENLID[label]for label in labels], "text": instance.strip()})
-    return instances
+def read_dataset(file: argparse.FileType) -> tuple[Dataset, list[str]]:
+    dataset: Dataset = json.load(file)
 
+    labels = set()
+    for section_a in dataset.values():
+        for section_b in section_a.values():
+            for instance in section_b:
+                labels.update(instance["label"])
+
+    return dataset, list(labels)
 
 def compute_loose_accuracy(predicted, gold):
     correct = 0
@@ -95,14 +106,11 @@ def value_indices(arr, values):
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned CANINE model")
-    parser.add_argument("--model-type", type=ModelTypeT, choices=list(MODELS.keys()),
-                        default="canine", help="The underlying model type to train")
+    parser.add_argument("--model-type", type=ModelTypeT, choices=list(MODELS.keys()), help="The underlying model type to train")
     parser.add_argument("--model-path", type=str, default=MODEL_PATH,
                         help="Directory of the finetuned model")
-    parser.add_argument("--labels", type=str, nargs="*",
-                        help="The labels which the sentences are")
     parser.add_argument("--input", type=argparse.FileType('r'),
-                        default=sys.stdin, help="Test sentences")
+                        default=sys.stdin, help="Test dataset")
     parser.add_argument("--input-dir", type=str, default=None,
                         help="Instead of single file read an entire directory")
     parser.add_argument("--type", choices=["multiclass", "multilabel"],
@@ -138,8 +146,7 @@ def main():
     if args.input_dir:
         test_data, labels = read_directory(args.input_dir)
     else:
-        test_data = read_file(args.input, args.labels)
-        labels = args.labels
+        test_data, labels = read_dataset(args.input)
 
     if args.type == "multiclass":
         model, tokenizer = get_multiclass_model(args.model_path, device)
@@ -165,7 +172,7 @@ def main():
     gold = []
     for item in tqdm.tqdm(test_data):
         predictions.append(predict_func(item["text"]))
-        gold.append(item["languages"])
+        gold.append(item["label"])
 
     print(
         f"Loose accuracy: {compute_loose_accuracy(predictions, gold)}", file=args.output)
