@@ -32,7 +32,7 @@ ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finished_multilabel"
 
 
-def read_directory(path) -> list[Instance]:
+def read_directory(path) -> tuple[list[Instance], list[str]]:
     joint_dir = f"{path}/joint"
     single_dir = f"{path}/single"
 
@@ -65,16 +65,29 @@ def read_directory(path) -> list[Instance]:
     return dataset, list(label_set)
 
 
-def read_dataset(file: argparse.FileType) -> tuple[Dataset, list[str]]:
-    dataset: Dataset = json.load(file)
-
+def get_labels(instances: list[Instance]) -> set[str]:
     labels = set()
-    for section_a in dataset.values():
-        for section_b in section_a.values():
-            for instance in section_b:
-                labels.update(instance["label"])
+    for instance in instances:
+        labels.update(instance["label"])
+    return labels
 
-    return dataset, list(labels)
+def get_dataset(input_dataset: dict[str, list[Instance] | dict]) -> tuple[list[Instance], set[str]]:
+    dataset = []
+    labels = set()
+    for section in input_dataset.values():
+        if isinstance(section, dict):
+            inner_dataset, inner_labels = get_dataset(section)
+            dataset.extend(inner_dataset)
+            labels.update(inner_labels)
+        else:
+            dataset.extend(section)
+            labels.update(get_labels(section))
+
+    return dataset, labels
+
+def read_dataset(file: argparse.FileType) -> tuple[list[Instance], list[str]]:
+    dataset: Dataset = json.load(file)
+    return get_dataset(dataset)
 
 def compute_loose_accuracy(predicted, gold):
     correct = 0
@@ -143,11 +156,13 @@ def main():
     assert isinstance(multilabel_encoder, MultiLabelBinarizer)\
         if args.type == "multilabel" else isinstance(encoder, LabelEncoder)
 
+    logging.info("Loading test data")
     if args.input_dir:
         test_data, labels = read_directory(args.input_dir)
     else:
         test_data, labels = read_dataset(args.input)
 
+    logging.info("Loading model: %s", args.type)
     if args.type == "multiclass":
         model, tokenizer = get_multiclass_model(args.model_path, device)
         assert isinstance(model, CanineForSequenceClassification)
