@@ -118,8 +118,8 @@ def value_indices(arr, values):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Evaluation of language prediction using finetuned CANINE model")
-    parser.add_argument("--model-type", type=ModelTypeT, choices=list(MODELS.keys()), help="The underlying model type to train")
+        description="Evaluation of language prediction using finetuned model")
+    parser.add_argument("--model-type", type=str, choices=list(MODELS.keys()), help="The underlying model type to train")
     parser.add_argument("--model-path", type=str, default=MODEL_PATH,
                         help="Directory of the finetuned model")
     parser.add_argument("--input", type=argparse.FileType('r'),
@@ -157,10 +157,7 @@ def main():
         if args.type == "multilabel" else isinstance(encoder, LabelEncoder)
 
     logging.info("Loading test data")
-    if args.input_dir:
-        test_data, labels = read_directory(args.input_dir)
-    else:
-        test_data, labels = read_dataset(args.input)
+    test_data, labels = read_dataset(args.input)
 
     logging.info("Loading model: %s", args.type)
     if args.type == "multiclass":
