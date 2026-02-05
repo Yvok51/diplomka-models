@@ -376,7 +376,7 @@ class MultilabelNLIClassifier:
 
 def train_model(
     output_dir: str,
-    samples_per_language: int | None = None,
+    samples_per_language: int | None = 10000,
     test_size: float = 0.001,
     ngram_size: int = 6,
     C: float = 100.0,
@@ -433,7 +433,7 @@ def train_model(
 
 def train_multilabel_model(
     output_dir: str,
-    samples_per_language: int | None = None,
+    samples_per_language: int | None = 10000,
     test_size: float = 0.001,
     ngram_size: int = 6,
     C: float = 100.0,
@@ -631,7 +631,7 @@ def main():
     train_parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for reproducibility")
     train_parser.add_argument("--samples-per-language", type=int,
-                              default=None, help="The number of samples per language to use")
+                              default=10000, help="The number of samples per language to use (default: 10000)")
     train_parser.add_argument("--test-size", type=float,
                               default=0.001, help="Proportion of data to use for evaluation")
     train_parser.add_argument('--output', type=str, default='models',
