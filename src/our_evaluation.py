@@ -35,7 +35,7 @@ def get_labels(instances: list[Instance]) -> set[str]:
         labels.update(instance["label"])
     return labels
 
-def get_dataset(input_dataset: dict[str, list[Instance] | dict]) -> tuple[list[Instance], set[str]]:
+def get_dataset(input_dataset: dict[str, list[Instance] | dict]) -> tuple[list[Instance], list[str]]:
     dataset = []
     labels = set()
     for section in input_dataset.values():
@@ -47,7 +47,7 @@ def get_dataset(input_dataset: dict[str, list[Instance] | dict]) -> tuple[list[I
             dataset.extend(section)
             labels.update(get_labels(section))
 
-    return dataset, labels
+    return dataset, list(labels)
 
 def read_dataset(file: argparse.FileType) -> tuple[list[Instance], list[str]]:
     dataset: Dataset = json.load(file)
@@ -73,7 +73,7 @@ def compute_score(predicted: list[list[str]], gold: list[list[str]], encoder: Mu
     return metric(predicted, gold, average=None, zero_division=0)
 
 
-def value_indices(arr, values):
+def value_indices(arr: np.ndarray, values: np.ndarray):
     """Return indices in `arr` of the values in `values`. Returns the indices in the order of `values`."""
     sorter = np.argsort(arr)
     return sorter[np.searchsorted(arr, values, sorter=sorter)]
@@ -159,8 +159,7 @@ def main():
     f1 = compute_score(predictions, gold, multilabel_encoder, f1_score)
     precision = compute_score(predictions, gold, multilabel_encoder, precision_score)
     recall = compute_score(predictions, gold, multilabel_encoder, recall_score)
-    indices = value_indices(
-        multilabel_encoder.classes_, [GCLD_TO_OPENLID[l] for l in labels])
+    indices = value_indices(multilabel_encoder.classes_, np.asarray(labels))
     for idx, label in zip(indices, labels):
         print(
             f"{label},{round(f1[idx], 4)},{round(precision[idx], 4)},{round(recall[idx], 4)}", file=args.output)
