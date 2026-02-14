@@ -1,9 +1,6 @@
 import argparse
 import sys
 import logging
-import glob
-from pathlib import Path
-import os
 from typing import TypedDict
 import json
 
@@ -14,7 +11,7 @@ import tqdm
 import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-from components.common import PROJECT_PATH, load_object, GCLD_TO_OPENLID, ModelTypeT, MODELS
+from components.common import PROJECT_PATH, load_object, GCLD_TO_OPENLID, MODELS
 from components.prediction import predict_multiclass, predict_multilabel
 from flores_evaluation import get_multiclass_model
 from multilabel import get_multilabel_model
@@ -30,39 +27,6 @@ DATA_FOLDER = PROJECT_PATH / "data"
 
 ENCODER_PATH = PROJECT_PATH / "trainer_output" / "multilabel_encoder.pkl"
 MODEL_PATH = PROJECT_PATH / "finished_multilabel"
-
-
-def read_directory(path) -> tuple[list[Instance], list[str]]:
-    joint_dir = f"{path}/joint"
-    single_dir = f"{path}/single"
-
-    dataset = []
-
-    label_set = set()
-
-    for p in glob.iglob(f"{single_dir}/*.txt"):
-        if os.path.getsize(p) == 0:
-            continue
-
-        labels = [Path(p).stem]
-        label_set.update(labels)
-        labels = [GCLD_TO_OPENLID[labels[0]]]
-        with open(p, "r", encoding='utf-8') as f:
-            for line in f:
-                dataset.append({"label": labels, "text": line.strip()})
-
-    for p in glob.iglob(f"{joint_dir}/*.txt"):
-        if os.path.getsize(p) == 0:
-            continue
-
-        labels = [label for label in Path(p).stem.split("-")]
-        label_set.update(labels)
-        labels = [GCLD_TO_OPENLID[l] for l in labels]
-        with open(p, "r", encoding='utf-8') as f:
-            for line in f:
-                dataset.append({"label": labels, "text": line.strip()})
-
-    return dataset, list(label_set)
 
 
 def get_labels(instances: list[Instance]) -> set[str]:
@@ -89,7 +53,7 @@ def read_dataset(file: argparse.FileType) -> tuple[list[Instance], list[str]]:
     dataset: Dataset = json.load(file)
     return get_dataset(dataset)
 
-def compute_loose_accuracy(predicted, gold):
+def compute_loose_accuracy(predicted: list[list[str]], gold: list[list[str]]) -> float:
     correct = 0
     for prediction, y in zip(predicted, gold):
         # The paper says if there is an overlap, but the implementation at https://github.com/ltgoslo/slide/blob/main/src/evaluate.py seems to use issubset
@@ -98,11 +62,11 @@ def compute_loose_accuracy(predicted, gold):
     return correct / len(gold)
 
 
-def compute_exact_match_accuracy(predicted, gold):
+def compute_exact_match_accuracy(predicted: list[list[str]], gold: list[list[str]]) -> float:
     return sum([set(p) == set(y) for p, y in zip(predicted, gold)]) / len(gold)
 
 
-def compute_score(predicted, gold, encoder: MultiLabelBinarizer, metric):
+def compute_score(predicted: list[list[str]], gold: list[list[str]], encoder: MultiLabelBinarizer, metric):
     predicted = np.asarray(encoder.transform(predicted))
     gold = np.asarray(encoder.transform(gold))
 
@@ -175,13 +139,13 @@ def main():
         def predict_func(sentence):
             prediction = predict_multilabel(
                 sentence, model, tokenizer, multilabel_encoder, device)
-            predicted_langs = list(
+            predicted_langs: list[str] = list(
                 zip(*prediction))[0] if len(prediction) > 0 else []
             return list(predicted_langs)
 
     logging.info("Starting predictions...")
-    predictions = []
-    gold = []
+    predictions: list[list[str]] = []
+    gold: list[list[str]] = []
     for item in tqdm.tqdm(test_data):
         predictions.append(predict_func(item["text"]))
         gold.append(item["label"])
