@@ -11,7 +11,10 @@ import tqdm
 import numpy as np
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-from components.common import PROJECT_PATH, load_object, GCLD_TO_OPENLID, MODELS
+from components.common import (
+    PROJECT_PATH, load_object, GCLD_TO_OPENLID, MODELS,
+    FASTTEXT_TO_OPENLID, GLOT_TO_OPENLID, OPENLID_TO_OPENLID
+)
 from components.prediction import predict_multiclass, predict_multilabel
 from flores_evaluation import get_multiclass_model
 from multilabel import get_multilabel_model
@@ -104,7 +107,7 @@ def make_predictions_hierarchical(
 
     for level1_key, level1_value in dataset.items():
         if not isinstance(level1_value, dict):
-            logging.warning(f"Skipping {level1_key}: not a dict, got {type(level1_value)}")
+            logging.warning("Skipping %s: not a dict, got %s", level1_key, type(level1_value))
             continue
         predictions[level1_key] = {}
 
@@ -114,7 +117,7 @@ def make_predictions_hierarchical(
                 predictions[level1_key][level2_key] = []
                 for instance in tqdm.tqdm(level2_value, desc=f"{level1_key}/{level2_key}", leave=False):
                     if not isinstance(instance, dict):
-                        logging.warning(f"Skipping instance in {level1_key}/{level2_key}: not a dict")
+                        logging.warning("Skipping instance in %s/%s: not a dict", level1_key, level2_key)
                         continue
                     pred = predict_func(instance["text"])
                     gold = instance["label"]
@@ -124,20 +127,20 @@ def make_predictions_hierarchical(
             elif isinstance(level2_value, dict):
                 for level3_key, instances in level2_value.items():
                     if not isinstance(instances, list):
-                        logging.warning(f"Skipping {level1_key}/{level2_key}/{level3_key}: not a list")
+                        logging.warning("Skipping %s/%s/%s: not a list", level1_key, level2_key, level3_key)
                         continue
                     # Use level2_key/level3_key as the combined key
                     combined_key = f"{level2_key}/{level3_key}"
                     predictions[level1_key][combined_key] = []
                     for instance in tqdm.tqdm(instances, desc=f"{level1_key}/{combined_key}", leave=False):
                         if not isinstance(instance, dict):
-                            logging.warning(f"Skipping instance in {level1_key}/{combined_key}: not a dict")
+                            logging.warning("Skipping instance in %s/%s: not a dict", level1_key, combined_key)
                             continue
                         pred = predict_func(instance["text"])
                         gold = instance["label"]
                         predictions[level1_key][combined_key].append((pred, gold))
             else:
-                logging.warning(f"Skipping {level1_key}/{level2_key}: unexpected type {type(level2_value)}")
+                logging.warning("Skipping %s/%s: unexpected type %s", level1_key, level2_key, type(level2_value))
 
     return predictions
 
@@ -244,7 +247,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned model")
     parser.add_argument("--model-kind", type=str, choices=["transformer", "tfidf"],
-                        default="transformer", help="Kind of model (transformer or tfidf)")
+                        help="Kind of model (transformer or tfidf), only needed for multiclass/multilabel types")
     parser.add_argument("--model-type", type=str, choices=list(MODELS.keys()), help="The underlying model type to train")
     parser.add_argument("--model-path", type=str, default=MODEL_PATH,
                         help="Directory of the finetuned model or path to TF-IDF pickle file")
@@ -252,7 +255,7 @@ def main():
                         default=sys.stdin, help="Test dataset")
     parser.add_argument("--input-dir", type=str, default=None,
                         help="Instead of single file read an entire directory")
-    parser.add_argument("--type", choices=["multiclass", "multilabel"],
+    parser.add_argument("--type", choices=["multiclass", "multilabel", "fasttext", "glotlid", "openlid", "gcld3"],
                         help="The model which we are using", default="multilabel")
     parser.add_argument("--multilabel-encoder", type=str,
                         default=str(ENCODER_PATH), help="Path to the multilabel encoder")
@@ -275,62 +278,111 @@ def main():
 
     logging.info("Using device %s", device)
 
-    # Load encoders for transformer models
-    if args.model_kind == "transformer":
+    # Load encoders based on model type
+    if args.type == "multilabel":
+        # Multilabel models always need the multilabel encoder
         multilabel_encoder: MultiLabelBinarizer = load_object(
             args.multilabel_encoder)
         assert isinstance(multilabel_encoder, MultiLabelBinarizer)
-        encoder: MultiLabelBinarizer | LabelEncoder = load_object(args.encoder)
-        assert isinstance(multilabel_encoder, MultiLabelBinarizer)\
-            if args.type == "multilabel" else isinstance(encoder, LabelEncoder)
+    elif args.type in ["fasttext", "glotlid", "openlid", "gcld3"]:
+        # These external models don't need encoders loaded, but we need multilabel_encoder for metrics
+        multilabel_encoder: MultiLabelBinarizer = load_object(
+            args.multilabel_encoder)
+        assert isinstance(multilabel_encoder, MultiLabelBinarizer)
     else:
-        # For TF-IDF models, the encoder is embedded in the model
-        # But we still need to load multilabel_encoder for evaluation metrics
+        # Multiclass and TF-IDF multiclass models
         multilabel_encoder: MultiLabelBinarizer = load_object(
             args.multilabel_encoder)
         assert isinstance(multilabel_encoder, MultiLabelBinarizer)
+        if args.model_kind == "transformer":
+            encoder: MultiLabelBinarizer | LabelEncoder = load_object(args.encoder)
+            assert isinstance(encoder, LabelEncoder)
 
     logging.info("Loading test data")
     test_dataset = read_dataset_hierarchical(args.input)
 
-    logging.info("Loading model: %s %s", args.model_kind, args.type)
+    logging.info("Loading model: %s", args.type)
 
-    if args.model_kind == "tfidf":
-        # TF-IDF model evaluation
-        if args.type == "multiclass":
-            model = NLIClassifier.load_model(args.model_path)
+    # Check for external models first (they don't use model_kind)
+    if args.type == "gcld3":
+        # GCLD3 model evaluation
+        from gcld3 import NNetLanguageIdentifier
 
-            def predict_func(sentence):
-                result = model.predict_single(sentence)
-                return [result['prediction']]
+        detector = NNetLanguageIdentifier(0, 512)
 
-        elif args.type == "multilabel":
-            model = MultilabelNLIClassifier.load_model(args.model_path)
+        def predict_func(sentence):
+            prediction = detector.FindLanguage(sentence).language
+            return [GCLD_TO_OPENLID[prediction]]
 
-            def predict_func(sentence):
-                result = model.predict_single(sentence)
-                return result['predictions']
+    elif args.type in ["fasttext", "glotlid", "openlid"]:
+        # External models from HuggingFace (fasttext, glotlid, openlid)
+        import fasttext
+        from huggingface_hub import hf_hub_download
 
-    elif args.model_kind == "transformer":
-        # Transformer model evaluation
-        if args.type == "multiclass":
-            model, tokenizer = get_multiclass_model(args.model_path, device)
-            assert isinstance(model, CanineForSequenceClassification)
+        TYPES_CONFIG = {
+            "openlid": {"repo": "laurievb/OpenLID", "map": OPENLID_TO_OPENLID},
+            "glotlid": {"repo": "cis-lmu/glotlid", "map": GLOT_TO_OPENLID},
+            "fasttext": {"repo": "facebook/fasttext-language-identification", "map": FASTTEXT_TO_OPENLID}
+        }
 
-            def predict_func(sentence):
-                prediction = predict_multiclass(
-                    sentence, model, tokenizer, encoder, device)
-                return [prediction[0][0]]
+        config = TYPES_CONFIG[args.type]
+        model_path = hf_hub_download(
+            repo_id=config["repo"], filename="model.bin")
+        model = fasttext.load_model(model_path)
 
-        elif args.type == "multilabel":
-            model, tokenizer = get_multilabel_model(args.model_path, device, args.model_type)
+        def predict_func(sentence):
+            try:
+                prediction = model.predict(sentence)
+            except ValueError as e:
+                if "Unable to avoid copy" in str(e):
+                    # Numpy 2.0 compatibility issue - use predict with k=1
+                    logging.warning("Fasttext model fails on sentence: %s", sentence)
+                    prediction = model.predict(sentence, k=1)
+                else:
+                    raise
+            return [config["map"][prediction[0][0]]]
 
-            def predict_func(sentence):
-                prediction = predict_multilabel(
-                    sentence, model, tokenizer, multilabel_encoder, device)
-                predicted_langs: list[str] = list(
-                    zip(*prediction))[0] if len(prediction) > 0 else []
-                return list(predicted_langs)
+    # For multiclass/multilabel, check model_kind
+    elif args.type in ["multiclass", "multilabel"]:
+        if args.model_kind is None:
+            parser.error("--model-kind is required when using --type multiclass or multilabel")
+
+        if args.model_kind == "tfidf":
+            # TF-IDF model evaluation
+            if args.type == "multiclass":
+                model = NLIClassifier.load_model(args.model_path)
+
+                def predict_func(sentence):
+                    result = model.predict_single(sentence)
+                    return [result['prediction']]
+
+            elif args.type == "multilabel":
+                model = MultilabelNLIClassifier.load_model(args.model_path)
+
+                def predict_func(sentence):
+                    result = model.predict_single(sentence)
+                    return result['predictions']
+
+        elif args.model_kind == "transformer":
+            # Transformer model evaluation
+            if args.type == "multiclass":
+                model, tokenizer = get_multiclass_model(args.model_path, device)
+                assert isinstance(model, CanineForSequenceClassification)
+
+                def predict_func(sentence):
+                    prediction = predict_multiclass(
+                        sentence, model, tokenizer, encoder, device)
+                    return [prediction[0][0]]
+
+            elif args.type == "multilabel":
+                model, tokenizer = get_multilabel_model(args.model_path, device, args.model_type)
+
+                def predict_func(sentence):
+                    prediction = predict_multilabel(
+                        sentence, model, tokenizer, multilabel_encoder, device)
+                    predicted_langs: list[str] = list(
+                        zip(*prediction))[0] if len(prediction) > 0 else []
+                    return list(predicted_langs)
 
     logging.info("Starting predictions...")
     prediction_dataset = make_predictions_hierarchical(test_dataset, predict_func)
