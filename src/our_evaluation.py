@@ -22,6 +22,9 @@ class Instance(TypedDict):
 
 Dataset = dict[str, dict[str, list[Instance]]]
 
+# Predictions paired with gold labels
+PredictionItem = tuple[list[str], list[str]]  # (prediction, gold)
+PredictionDataset = dict[str, dict[str, list[PredictionItem]]]
 
 DATA_FOLDER = PROJECT_PATH / "data"
 
@@ -80,6 +83,162 @@ def value_indices(arr: np.ndarray, values: np.ndarray):
     # np.in1d(arr, values).nonzero()[0]
 
 
+def read_dataset_hierarchical(file: argparse.FileType) -> Dataset:
+    """Read dataset maintaining its hierarchical structure."""
+    dataset: Dataset = json.load(file)
+    return dataset
+
+
+def make_predictions_hierarchical(
+    dataset: Dataset,
+    predict_func
+) -> PredictionDataset:
+    """Make predictions maintaining the hierarchical structure of the dataset.
+
+    Handles variable depth in dataset structure:
+    - 2-level: {level1: {level2: [instances]}}
+    - 3-level: {level1: {level2: {level3: [instances]}}}
+    """
+    predictions: PredictionDataset = {}
+
+    for level1_key, level1_value in dataset.items():
+        if not isinstance(level1_value, dict):
+            logging.warning(f"Skipping {level1_key}: not a dict, got {type(level1_value)}")
+            continue
+        predictions[level1_key] = {}
+
+        for level2_key, level2_value in level1_value.items():
+            # Check if this is a list of instances (2-level structure)
+            if isinstance(level2_value, list):
+                predictions[level1_key][level2_key] = []
+                for instance in tqdm.tqdm(level2_value, desc=f"{level1_key}/{level2_key}", leave=False):
+                    if not isinstance(instance, dict):
+                        logging.warning(f"Skipping instance in {level1_key}/{level2_key}: not a dict")
+                        continue
+                    pred = predict_func(instance["text"])
+                    gold = instance["label"]
+                    predictions[level1_key][level2_key].append((pred, gold))
+
+            # Check if this is another dict level (3-level structure)
+            elif isinstance(level2_value, dict):
+                for level3_key, instances in level2_value.items():
+                    if not isinstance(instances, list):
+                        logging.warning(f"Skipping {level1_key}/{level2_key}/{level3_key}: not a list")
+                        continue
+                    # Use level2_key/level3_key as the combined key
+                    combined_key = f"{level2_key}/{level3_key}"
+                    predictions[level1_key][combined_key] = []
+                    for instance in tqdm.tqdm(instances, desc=f"{level1_key}/{combined_key}", leave=False):
+                        if not isinstance(instance, dict):
+                            logging.warning(f"Skipping instance in {level1_key}/{combined_key}: not a dict")
+                            continue
+                        pred = predict_func(instance["text"])
+                        gold = instance["label"]
+                        predictions[level1_key][combined_key].append((pred, gold))
+            else:
+                logging.warning(f"Skipping {level1_key}/{level2_key}: unexpected type {type(level2_value)}")
+
+    return predictions
+
+
+def collect_predictions(pred_items: list[PredictionItem]) -> tuple[list[list[str]], list[list[str]], set[str]]:
+    """Extract predictions and gold labels from a list of prediction items."""
+    if not pred_items:
+        return [], [], set()
+
+    predictions, gold = zip(*pred_items)
+    labels = set()
+    for g in gold:
+        labels.update(g)
+
+    return list(predictions), list(gold), labels
+
+
+def collect_all_predictions(pred_dict: dict[str, list[PredictionItem]]) -> tuple[list[list[str]], list[list[str]], set[str]]:
+    """Recursively collect all predictions from a dictionary subtree."""
+    all_predictions = []
+    all_gold = []
+    all_labels = set()
+
+    for value in pred_dict.values():
+        preds, gold, labels = collect_predictions(value)
+        all_predictions.extend(preds)
+        all_gold.extend(gold)
+        all_labels.update(labels)
+
+    return all_predictions, all_gold, all_labels
+
+
+def output_metrics(
+    predictions: list[list[str]],
+    gold: list[list[str]],
+    labels: set[str],
+    encoder: MultiLabelBinarizer,
+    output_file,
+    section_name: str
+):
+    """Compute and output all metrics for a given set of predictions."""
+    if not predictions:
+        return
+
+    print(f"\n=== {section_name} ===", file=output_file)
+    print(f"Sample count: {len(predictions)}", file=output_file)
+    print(f"Loose accuracy: {compute_loose_accuracy(predictions, gold):.4f}", file=output_file)
+    print(f"Exact match accuracy: {compute_exact_match_accuracy(predictions, gold):.4f}", file=output_file)
+
+    # Compute per-language metrics
+    f1 = compute_score(predictions, gold, encoder, f1_score)
+    precision = compute_score(predictions, gold, encoder, precision_score)
+    recall = compute_score(predictions, gold, encoder, recall_score)
+
+    # Filter to labels present in this subset
+    if labels:
+        print("Per-language scores (language, F1, precision, recall):", file=output_file)
+        sorted_labels = sorted(labels)
+        indices = value_indices(encoder.classes_, np.asarray(sorted_labels))
+        for idx, label in zip(indices, sorted_labels):
+            print(f"  {label}: {round(f1[idx], 4)}, {round(precision[idx], 4)}, {round(recall[idx], 4)}", file=output_file)
+
+
+def evaluate_hierarchical(
+    pred_dataset: PredictionDataset,
+    encoder: MultiLabelBinarizer,
+    output_file,
+    instances_flag: bool = False
+):
+    """Recursively evaluate predictions at all levels of the hierarchy."""
+
+    # Evaluate at leaf level (level1/level2)
+    for level1_key, level1_dict in pred_dataset.items():
+        for level2_key, pred_items in level1_dict.items():
+            predictions, gold, labels = collect_predictions(pred_items)
+            section_name = f"{level1_key}/{level2_key}"
+            output_metrics(predictions, gold, labels, encoder, output_file, section_name)
+
+            if instances_flag:
+                print(f"\n--- Instances for {section_name} ---", file=output_file)
+                for (pred, g), idx in zip(pred_items, range(len(pred_items))):
+                    print(f"  {idx}: predicted={pred}, gold={g}", file=output_file)
+
+    # Evaluate at parent level (level1)
+    for level1_key, level1_dict in pred_dataset.items():
+        predictions, gold, labels = collect_all_predictions(level1_dict)
+        section_name = f"{level1_key} (combined)"
+        output_metrics(predictions, gold, labels, encoder, output_file, section_name)
+
+    # Evaluate overall
+    all_predictions = []
+    all_gold = []
+    all_labels = set()
+    for level1_dict in pred_dataset.values():
+        preds, gold, labels = collect_all_predictions(level1_dict)
+        all_predictions.extend(preds)
+        all_gold.extend(gold)
+        all_labels.update(labels)
+
+    output_metrics(all_predictions, all_gold, all_labels, encoder, output_file, "Overall")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned model")
@@ -121,7 +280,7 @@ def main():
         if args.type == "multilabel" else isinstance(encoder, LabelEncoder)
 
     logging.info("Loading test data")
-    test_data, labels = read_dataset(args.input)
+    test_dataset = read_dataset_hierarchical(args.input)
 
     logging.info("Loading model: %s", args.type)
     if args.type == "multiclass":
@@ -144,31 +303,15 @@ def main():
             return list(predicted_langs)
 
     logging.info("Starting predictions...")
-    predictions: list[list[str]] = []
-    gold: list[list[str]] = []
-    for item in tqdm.tqdm(test_data):
-        predictions.append(predict_func(item["text"]))
-        gold.append(item["label"])
+    prediction_dataset = make_predictions_hierarchical(test_dataset, predict_func)
 
-    print(
-        f"Loose accuracy: {compute_loose_accuracy(predictions, gold)}", file=args.output)
-    print(
-        f"Exact match accuracy: {compute_exact_match_accuracy(predictions, gold)}", file=args.output)
-
-    print("=== Scores ===", file=args.output)
-    f1 = compute_score(predictions, gold, multilabel_encoder, f1_score)
-    precision = compute_score(predictions, gold, multilabel_encoder, precision_score)
-    recall = compute_score(predictions, gold, multilabel_encoder, recall_score)
-    indices = value_indices(multilabel_encoder.classes_, np.asarray(labels))
-    for idx, label in zip(indices, labels):
-        print(
-            f"{label},{round(f1[idx], 4)},{round(precision[idx], 4)},{round(recall[idx], 4)}", file=args.output)
-
-    if args.instances:
-        print("=== Instances ===", file=args.output)
-        for instance, prediction, correct in zip(test_data, predictions, gold):
-            print(
-                f"{instance['text'].strip()}\t{prediction}\t{correct}", file=args.output)
+    logging.info("Computing metrics at all hierarchy levels...")
+    evaluate_hierarchical(
+        prediction_dataset,
+        multilabel_encoder,
+        args.output,
+        args.instances
+    )
 
 
 if __name__ == "__main__":
