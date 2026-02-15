@@ -20,7 +20,7 @@ from sklearn.metrics import (
     hamming_loss,
 )
 
-from common import load_dataset, PROJECT_PATH
+from .common import load_dataset, PROJECT_PATH
 
 
 class NLIClassifier:

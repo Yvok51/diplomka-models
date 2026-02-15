@@ -45,7 +45,7 @@ def predict_multilabel(
     except RuntimeError as e:
         # Sometimes the models seem to have trouble with single emoji length texts
         # Return empty prediction as the most logical option (predicting the input is not text)
-        logging.warning("Model crashed on trying to classify text: '%s', message: '%s'", text, repr(e))
+        logging.warning("Model threw exception when trying to classify text: '%s', exception: '%s'", text, repr(e))
         return []
 
 
@@ -57,12 +57,18 @@ def predict_multiclass(
     device: str
 ) -> list[tuple[str, float]]: # always single item
     """Predict the language of a given text using a multiclass model."""
-    logits = get_logits(text, model, tokenizer, device)
-    prediction: np.ndarray = torch.argmax(logits, dim=-1).cpu().numpy()[0]
 
-    language: str = label_encoder.inverse_transform([prediction])[0]
+    try:
+        logits = get_logits(text, model, tokenizer, device)
+        prediction: np.ndarray = torch.argmax(logits, dim=-1).cpu().numpy()[0]
 
-    probs = torch.nn.functional.softmax(logits, dim=-1)
-    confidence = probs[0][prediction].item()
+        language: str = label_encoder.inverse_transform([prediction])[0]
 
-    return [(language, confidence)]
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        confidence = probs[0][prediction].item()
+
+        return [(language, confidence)]
+    except RuntimeError as e:
+        # Sometimes the models seem to have trouble with single emoji length texts
+        logging.warning("Multiclass model threw exception when tryign to classify text: %s, exception: %s", text, repr(e))
+        return [('eng_Latn', 1.)]
