@@ -330,16 +330,18 @@ def main():
             repo_id=config["repo"], filename="model.bin")
         model = fasttext.load_model(model_path)
 
+        # Monkey-patch numpy.array to fix fasttext numpy 2.0 compatibility
+        original_np_array = np.array
+        def patched_array(object, dtype=None, copy=None, order='K', subok=False, ndmin=0, like=None):
+            # If copy=False, change it to None to avoid numpy 2.0 error
+            if copy is False:
+                copy = None
+            return original_np_array(object, dtype=dtype, copy=copy, order=order, subok=subok, ndmin=ndmin)
+
+        np.array = patched_array
+
         def predict_func(sentence):
-            try:
-                prediction = model.predict(sentence)
-            except ValueError as e:
-                if "Unable to avoid copy" in str(e):
-                    # Numpy 2.0 compatibility issue - use predict with k=1
-                    logging.warning("Fasttext model fails on sentence: %s", sentence)
-                    prediction = model.predict(sentence, k=1)
-                else:
-                    raise
+            prediction = model.predict(sentence)
             return [config["map"][prediction[0][0]]]
 
     # For multiclass/multilabel, check model_kind

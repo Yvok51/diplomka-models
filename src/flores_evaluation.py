@@ -92,7 +92,7 @@ def false_positive_rate(predictions, gold, get_rates):
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned CANINE model")
-    parser.add_argument("--model-type", type=ModelTypeT, choices=list(MODELS.keys()),
+    parser.add_argument("--model-type", type=str, choices=list(MODELS.keys()),
                         default="canine", help="The underlying model type to train")
     parser.add_argument("--model-path", type=str,
                         default=str(MODEL_PATH), help="Directory of the finetuned model")
