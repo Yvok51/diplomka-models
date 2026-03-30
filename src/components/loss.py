@@ -70,14 +70,14 @@ class NegativeSamplingBCELoss(nn.Module):
         num_positives = positive_mask.sum(dim=1, keepdim=True)
 
         num_negative_samples = torch.floor(torch.clip(
-            num_positives, min=1).squeeze() * self.neg_sample_ratio)
+            num_positives, min=1).squeeze(1) * self.neg_sample_ratio)
 
         # For each instance, randomly select negative samples
         neg_sample_mask = torch.zeros_like(negative_mask)
         for i in range(logits.size(0)):
             neg_indices = torch.nonzero(negative_mask[i]).squeeze()
 
-            if neg_indices.dim() == 0 and neg_indices.size(0) > 0:
+            if neg_indices.dim() == 0:
                 # Handle case where there's only one negative example
                 neg_indices = neg_indices.unsqueeze(0)
 
@@ -88,18 +88,23 @@ class NegativeSamplingBCELoss(nn.Module):
                 # Average the similarity of the various languages in the instance
                 average_similarity = torch.nan_to_num(torch.mean(
                     self.similarity[positive_mask[i].bool()], dim=0))
-                # We actually want the least similar languages to be selected more often
+                # We want the least similar languages to be selected more often,
+                # preserving permissiveness between similar languages for multilabel overlap
                 inverse_similarity = 1 - average_similarity
 
                 similarity_negative_samples = inverse_similarity[negative_mask[i].bool(
                 )]
-                probabilities = similarity_negative_samples / similarity_negative_samples.sum()
+                total_similarity = similarity_negative_samples.sum()
+                if total_similarity == 0:
+                    probabilities = None # when no similarity present, use uniform sampling
+                else:
+                    probabilities = (similarity_negative_samples / total_similarity).cpu().numpy()
 
                 selected_indices = np.random.choice(
                     neg_indices.cpu().numpy(),
                     size=samples_to_keep,
                     replace=False,
-                    p=probabilities.cpu().numpy()
+                    p=probabilities
                 )
 
                 # mark the negative samples to use

@@ -261,6 +261,7 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the multilabel encoder")
     parser.add_argument("--encoder", type=str, default=str(ENCODER_PATH),
                         help="Encoder to use with the model")
+    parser.add_argument("--threshold", type=float, default=0.5, help="The threshold to use with multilabel models")
     parser.add_argument("--seed", type=int,
                         default=42, help="Seed for the random number generator")
     parser.add_argument("--instances", action="store_true",
@@ -362,7 +363,7 @@ def main():
                 model = MultilabelNLIClassifier.load_model(args.model_path)
 
                 def predict_func(sentence):
-                    result = model.predict_single(sentence)
+                    result = model.predict_single(sentence, threshold=args.threshold)
                     return result['predictions']
 
         elif args.model_kind == "transformer":
@@ -381,7 +382,7 @@ def main():
 
                 def predict_func(sentence):
                     prediction = predict_multilabel(
-                        sentence, model, tokenizer, multilabel_encoder, device)
+                        sentence, model, tokenizer, multilabel_encoder, device, args.threshold)
                     predicted_langs: list[str] = list(
                         zip(*prediction))[0] if len(prediction) > 0 else []
                     return list(predicted_langs)
