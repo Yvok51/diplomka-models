@@ -631,7 +631,7 @@ def main():
     train_parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for reproducibility")
     train_parser.add_argument("--samples-per-language", type=int,
-                              default=10000, help="The number of samples per language to use (default: 10000)")
+                              default=None, help="The number of samples per language to use (default: 10000)")
     train_parser.add_argument("--test-size", type=float,
                               default=0.001, help="Proportion of data to use for evaluation")
     train_parser.add_argument('--output', type=str, default='models',
@@ -693,7 +693,7 @@ def main():
                 text = f.read()
             predict_fn(model, text)
         else:
-            print("Please provide either --text or --file")
+            print("Provide either --text or --file")
 
     else:
         parser.print_help()

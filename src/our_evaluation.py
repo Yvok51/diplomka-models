@@ -64,7 +64,10 @@ def compute_loose_accuracy(predicted: list[list[str]], gold: list[list[str]]) ->
     correct = 0
     for prediction, y in zip(predicted, gold):
         # The paper says if there is an overlap, but the implementation at https://github.com/ltgoslo/slide/blob/main/src/evaluate.py seems to use issubset
-        correct += len(set(prediction).intersection(set(y))) != 0
+        if len(prediction) == 0 and len(y) == 0:
+            correct += 1
+        else:
+            correct += len(set(prediction).intersection(set(y))) != 0
 
     return correct / len(gold)
 
@@ -77,7 +80,7 @@ def compute_score(predicted: list[list[str]], gold: list[list[str]], encoder: Mu
     predicted = np.asarray(encoder.transform(predicted))
     gold = np.asarray(encoder.transform(gold))
 
-    return metric(predicted, gold, average=None, zero_division=0)
+    return metric(gold, predicted, average=None, zero_division=0)
 
 
 def value_indices(arr: np.ndarray, values: np.ndarray):
@@ -242,7 +245,15 @@ def evaluate_hierarchical(
 
     output_metrics(all_predictions, all_gold, all_labels, encoder, output_file, "Overall")
 
-
+# Called:
+#   gcld3: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type gcld3 --output our_evaluation/gcld3.txt
+#   fasttext: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type fasttext --output our_evaluation/fasttext.txt
+#   openlid: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type openlid --output our_evaluation/openlid.txt
+#   glotlid: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type glotlid --output our_evaluation/glotlid.txt
+#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ./dataset.json --model-path models/nli_multilabel_model_20260214_044828.pkl --encoder trainer_output/multilabel_encoder.pkl --type multilabel --output our_evaluation/tf_idf_multilabel.txt --model-kind tfidf
+#   tf-idf multiclass: python3 ./src/our_evaluation.py --input ./dataset.json --model-path models/nli_model_20260206_103101.pkl --encoder trainer_output/label_encoder.pkl --model-type canine --type multiclass --output our_evaluation/tf_idf_multiclass.txt --model-kind tfidf
+#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ./dataset.json --model-path finished_multilabel/ --encoder trainer_output/multilabel_encoder.pkl --model-type canine --output our_evaluation/canine_multilabel.txt
+#   canine multiclass: python3 ./src/our_evaluation.py --input ./dataset.json --model-path finished_multiclass/ --encoder trainer_output/label_encoder.pkl --model-type canine --output our_evaluation/canine_multiclass.txt
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned model")

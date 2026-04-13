@@ -231,7 +231,7 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--seed", type=int,
                         default=42, help="Path to the label encoder")
-    parser.add_argument("--samples-per-language", type=int, default=None,
+    parser.add_argument("--samples-per-language", type=int, default=10,
                         help="The number of samples per language to use")
     parser.add_argument("--epochs", type=int, default=1,
                         help="The number of training epochs")

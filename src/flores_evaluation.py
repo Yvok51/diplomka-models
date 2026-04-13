@@ -93,10 +93,10 @@ def false_positive_rate(predictions, gold, get_rates):
 #   fasttext: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type fasttext --output our_evaluation/fasttext.txt
 #   openlid: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type openlid --output our_evaluation/openlid.txt
 #   glotlid: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type glotlid --output our_evaluation/glotlid.txt
-#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --model-path models/nli_multilabel_model_20260214_044828.pkl --encoder trainer_output/multilabel_encoder.pkl --type multilabel --output our_evaluation/tf_idf_multilabel.txt --model-kind tfidf
-#   tf-idf multiclass: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --model-path models/nli_model_20260206_103101.pkl --encoder trainer_output/label_encoder.pkl --model-type canine --type multiclass --output our_evaluation/tf_idf_multiclass.txt --model-kind tfidf
-#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --model-path finished_multilabel/ --encoder trainer_output/multilabel_encoder.pkl --model-type canine --output our_evaluation/canine_multilabel.txt
-#   canine multiclass: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --model-path finished_multiclass/ --encoder trainer_output/label_encoder.pkl --model-type canine --output our_evaluation/canine_multiclass.txt
+#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ./dataset.json --model-path models/nli_multilabel_model_20260214_044828.pkl --encoder trainer_output/multilabel_encoder.pkl --type multilabel --output our_evaluation/tf_idf_multilabel.txt --model-kind tfidf
+#   tf-idf multiclass: python3 ./src/our_evaluation.py --input ./dataset.json --model-path models/nli_model_20260206_103101.pkl --encoder trainer_output/label_encoder.pkl --model-type canine --type multiclass --output our_evaluation/tf_idf_multiclass.txt --model-kind tfidf
+#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ./dataset.json --model-path finished_multilabel/ --encoder trainer_output/multilabel_encoder.pkl --model-type canine --output our_evaluation/canine_multilabel.txt
+#   canine multiclass: python3 ./src/our_evaluation.py --input ./dataset.json --model-path finished_multiclass/ --encoder trainer_output/label_encoder.pkl --model-type canine --output our_evaluation/canine_multiclass.txt
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned CANINE model")
@@ -110,6 +110,7 @@ def main():
                         default=str(ENCODER_PATH), help="Path to the label encoder")
     parser.add_argument("--confusion-matrix",
                         action="store_true", help="Print out confusion matrix")
+    parser.add_argument("--threshold", default=0.5, type=float, help="The threshold to use with multilabel models")
     parser.add_argument("--seed", type=int,
                         default=42, help="Path to the label encoder")
     parser.add_argument("--output", type=argparse.FileType('w'),
@@ -156,7 +157,7 @@ def main():
 
         def predict_func(sentence):
             prediction = predict_multilabel(
-                sentence, model, tokenizer, encoder, device)
+                sentence, model, tokenizer, encoder, device, threshold=args.threshold)
             predicted_langs = list(
                 zip(*prediction))[0] if len(prediction) > 0 else []
             return predicted_langs
