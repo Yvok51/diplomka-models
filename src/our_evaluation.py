@@ -250,10 +250,9 @@ def evaluate_hierarchical(
 #   fasttext: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type fasttext --output our_evaluation/fasttext.txt
 #   openlid: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type openlid --output our_evaluation/openlid.txt
 #   glotlid: python3 ./src/our_evaluation.py --input ../dataset/dataset.json --type glotlid --output our_evaluation/glotlid.txt
-#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ./dataset.json --model-path models/nli_multilabel_model_20260214_044828.pkl --encoder trainer_output/multilabel_encoder.pkl --type multilabel --output our_evaluation/tf_idf_multilabel.txt --model-kind tfidf
-#   tf-idf multiclass: python3 ./src/our_evaluation.py --input ./dataset.json --model-path models/nli_model_20260206_103101.pkl --encoder trainer_output/label_encoder.pkl --model-type canine --type multiclass --output our_evaluation/tf_idf_multiclass.txt --model-kind tfidf
-#   tf-idf multilabel: python3 ./src/our_evaluation.py --input ./dataset.json --model-path finished_multilabel/ --encoder trainer_output/multilabel_encoder.pkl --model-type canine --output our_evaluation/canine_multilabel.txt
-#   canine multiclass: python3 ./src/our_evaluation.py --input ./dataset.json --model-path finished_multiclass/ --encoder trainer_output/label_encoder.pkl --model-type canine --output our_evaluation/canine_multiclass.txt
+#   canine multiclass: python3 ./src/our_evaluation.py --input ./dataset.json --model-path multiclass/ --encoder trainer_output/label_encoder.pkl --model-type canine --model-kind transformer --multiclass --output our_evaluation/canine_multiclass.txt
+#   canine multilabel: python3 ./src/our_evaluation.py --input ./dataset.json --model-path multilabel/ --encoder trainer_output/multilabel_encoder.pkl --model-type canine --model-kind transformer --type multilabel --output our_evaluation/canine_multiclass.txt --threshold 0.3
+#   canine negative: python3 ./src/our_evaluation.py --input ./dataset.json --model-path negative/ --encoder trainer_output/multilabel_encoder.pkl --model-type canine --model-kind transformer --type multilabel --output our_evaluation/canine_multiclass.txt --threshold 0.1
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluation of language prediction using finetuned model")
@@ -268,8 +267,6 @@ def main():
                         help="Instead of single file read an entire directory")
     parser.add_argument("--type", choices=["multiclass", "multilabel", "fasttext", "glotlid", "openlid", "gcld3"],
                         help="The model which we are using", default="multilabel")
-    parser.add_argument("--multilabel-encoder", type=str,
-                        default=str(ENCODER_PATH), help="Path to the multilabel encoder")
     parser.add_argument("--encoder", type=str, default=str(ENCODER_PATH),
                         help="Encoder to use with the model")
     parser.add_argument("--threshold", type=float, default=0.5, help="The threshold to use with multilabel models")
