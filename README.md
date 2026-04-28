@@ -19,3 +19,6 @@ Other notes:
 - list of FLORES labels: [link](https://github.com/facebookresearch/flores/tree/main/flores200#languages-in-flores-200)
 - pycld3 package requires `protoc` - [The protocol buffers compiler](https://github.com/protocolbuffers/protobuf)
 
+## Install
+
+- run `pip install -r requirements.txt` and `pip install -r requirements-pytorch.txt`, then finally `./setup.sh`
